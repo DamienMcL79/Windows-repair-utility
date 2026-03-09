@@ -5,6 +5,7 @@ param(
 	[switch]$RunCHKDSK,
 	[switch]$RebootAfter,
 	[switch]$UseCHKDSK_R
+	[switch]$PreferUSBLog
 )
 
 # Ensure script is running with admin privileges, otherwise re-launch with admin rights
@@ -31,27 +32,39 @@ if (-not (Test-IsAdministrator)) {
 	Start-ElevatedSelf
 }
 
-#Detect USB drive
+# Determine log location
 
-$usbDrive = (Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 2 } | Select-Object -ExpandProperty DeviceID -First 1)
-if (-not $usbDrive) { $usbDrive = "C:" }
+$defaultLogRoot = Join-Path $env:ProgramData "WinRepairUtility\Logs"
+$logRoot = $defaultLogRoot
 
-#Create log folder
+if ($PreferUSBLog) {
+	$usbDrive = Get-CimInstance Win32_LogicalDisk |
+		Where-Object { $_.DriveType -eq 2 } |
+		Select-Object -ExpandProperty DeviceID -First 1
 
-$logFolder = "$usbDrive\DISM_Logs"
-if (-not (Test-Path $logFolder)) { 
 
-	New-Item -ItemType Directory -Path $logFolder | Out-Null 
+    if ($usbDrive) {
+		$logRoot = Join-Path $usbDrive "WinRepairUtility\Logs"
+		Write-Host "So, you inserted a USB drive, aren't YOU fancy? GOOD! Your logs will be save to $logRoot" -ForegroundColor Green
+	}
+	else {
+		Write-Host "No USB drive detected, logs will be saved to local drive at: $defaultLogRoot" -ForegroundColor Cyan
+	}
+}
+#Create log folder if it doesn't exist
+
+if (-not (Test-Path -Path $logRoot)) {
+	New-Item -Path $logRoot -ItemType Directory -Force | Out-Null
 }
 
-#Define Log file
+#Define log file with timestamp
 
 $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
-$logFile = "$logFolder\DISM_CHKDSK_$timestamp.log"
+$logFile = Join-Path $logRoot "WinRepair_$timestamp.log"
 
-#Log Start
+#Write initial log entry
 
-"=== SFC + DISM + CHKDSK Script Started $(Get-Date) ===" | Out-File -FilePath $logFile -Encoding utf8 -Append
+"=== WinRepair Script Started: $(Get-Date) ===" | Out-File -FilePath $logFile -Encoding utf8
 
 #Run SFC 
 "Running SFC /scannow" | Tee-Object -filePath %logFile -Append
