@@ -40,8 +40,8 @@ $logRoot = $defaultLogRoot
 
 if ($PreferUSBLog) {
 	$usbDrive = Get-CimInstance Win32_LogicalDisk |
-		Where-Object { $_.DriveType -eq 2 } |
-		Select-Object -ExpandProperty DeviceID -First 1
+	Where-Object { $_.DriveType -eq 2 } |
+	Select-Object -ExpandProperty DeviceID -First 1
 
 
     if ($usbDrive) {
@@ -107,14 +107,34 @@ function Run-SFC {
 		0 { Write-Log "SFC did not find any integrity violations. Your system files are in good shape! Congrats, you win a cookie!" }
 		1 { Write-Log "SFC found integrity violations and successfully repaired them. Your system files have been fixed! Great job, you win a gold star!" }
 		2 { Write-Log "SFC found integrity violations but was unable to fix some of them. Your system files may still be corrupted. Consider running SFC again or using DISM for further repairs. Don't worry, it's not the end of the world, just a minor setback!" }
-		3 { Write-Log "SFC SFC could not perform the requested operation. The scan may have failed or have been interrupted." }
+		3 { Write-Log "SFC could not perform the requested operation. The scan may have failed or have been interrupted." }
 		default { Write-Log "SFC encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
 	}
+
+	Write-Log ""
+
 } 
 
-#Run DISM
-#"Running DISM" | Tee-Object -FilePath $logFile -Append
-#DISM /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
+function Run-DISM {
+
+	Write-Log "Starting Deployment Image Servicing and Management (DISM) scan. (It is really nerdy that I know the meanings of these acronyms, isn't it?) This will check the health of the Windows image and attempt repairs if necessary. Grab a coffee, this might take a bit."
+	
+	DISM /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
+
+	$exitCode = $LASTEXITCODE
+	Write-Log "DISM scan completed with exit code: $exitCode."
+
+	switch ($exitCode) {
+		0 { Write-Log "DISM did not find any issues with the Windows image. Your system is in good shape! GREAT JOB!" }
+		1 { Write-Log "DISM found issues with the Windows image and successfully repaired them. Your system has been fixed! That is great, now we can get back to work!" }
+		2 { Write-Log "DISM found issues with the Windows image but was unable to fix some of them. Your system may still have problems. Consider running DISM again or I don't know, try something else?" }
+		3 { Write-Log "DISM could not perform the requested operation. The scan may have failed or been interrupted." }
+		default { Write-Log "DISM encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
+	}
+
+	Write-Log ""
+
+}
 
 #Queue and run CHKDSK with Y
 
