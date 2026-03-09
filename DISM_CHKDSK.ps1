@@ -93,19 +93,24 @@ if (-not ($RunSFC -or $RunDISM -or $RunCHKDSK)) {
 else {
 	Write-Log "Repair task switches detected, we will run only the specified tasks. Your choice, your consequences!"
 }
-	
-
-
-
-
-
-
-
 
 #Run SFC 
 #"Running SFC /scannow" | Tee-Object -filePath %logFile -Append
-#fc /scannow | Tee-Object -filePath %logFile -Append 
+function Run-SFC {
 
+	Write-Log "Starting System File Checker (SFC) scan. This may take a while. Go ahead, check out the break room, stretch your legs, maybe go touch some grass. I'll be here when you get back."
+	sfc /scannow | Tee-Object -FilePath $logFile -Append
+	$exitCode = $LASTEXITCODE
+	Write-Log "SFC scan completed with exit code: $exitCode."
+
+	switch ($exitCode){
+		0 { Write-Log "SFC did not find any integrity violations. Your system files are in good shape! Congrats, you win a cookie!" }
+		1 { Write-Log "SFC found integrity violations and successfully repaired them. Your system files have been fixed! Great job, you win a gold star!" }
+		2 { Write-Log "SFC found integrity violations but was unable to fix some of them. Your system files may still be corrupted. Consider running SFC again or using DISM for further repairs. Don't worry, it's not the end of the world, just a minor setback!" }
+		3 { Write-Log "SFC SFC could not perform the requested operation. The scan may have failed or have been interrupted." }
+		default { Write-Log "SFC encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
+	}
+} 
 
 #Run DISM
 #"Running DISM" | Tee-Object -FilePath $logFile -Append
