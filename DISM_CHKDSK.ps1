@@ -1,8 +1,34 @@
-# Self Elevate to admin mode
+[CmdletBinding()]
+param(
+	[switch]$RunSFC,
+	[switch]$RunDISM,
+	[switch]$RunCHKDSK,
+	[switch]$RebootAfter,
+	[switch]$UseCHKDSK_R
+)
 
-if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()). IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-	Start-Process powershell -AugmentList "ExecutionPolicy Bypass -File "'$PSCommandPath'"" -Verb RunAs
-	exit
+# Ensure script is running with admin privileges, otherwise re-launch with admin rights
+
+function Test-IsAdministrator {
+	$indentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+	$principal = New-Object Security.Principal.WindowsPrincipal($indentity)
+	return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Start-ElevatedSelf {
+	
+	$arguments = @(
+		"-NoProfile",
+		"-ExecutionPolicy", "Bypass",
+		"-File", "`"$PSCommandPath`""
+		)
+	
+	Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs
+}
+
+if (-not (Test-IsAdministrator)) {
+	Write-Host "We are not running with the correct level of privileges, hold on fam, we about to fix this..." -ForegroundColor Yellow
+	Start-ElevatedSelf
 }
 
 #Detect USB drive
