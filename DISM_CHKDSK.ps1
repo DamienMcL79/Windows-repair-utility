@@ -79,8 +79,8 @@ function Write-Log {
 		[string]$Message
 	)
 	if ([string]::IsNullOrWhiteSpace($Message)) {
-		Write_Host ""
-		Add-Content -Path $LogFile -Value ""
+		Write-Host ""
+		Add-Content -Path $logFile -Value ""
 		return
 	}
 	$timeStamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -108,7 +108,7 @@ else {
 Write-Log "Task selection: Run SFC: $RunSFC, Run DISM: $RunDISM, Run CHKDSK: $RunCHKDSK"
 
 #Run SFC 
-#"Running SFC /scannow" | Tee-Object -filePath %logFile -Append
+
 function Run-SFC {
 
 	Write-Log "Starting System File Checker (SFC) scan. This may take a while. Go ahead, check out the break room, stretch your legs, maybe go touch some grass. I'll be here when you get back."
@@ -118,15 +118,17 @@ function Run-SFC {
 
 	switch ($exitCode){
 		0 { Write-Log "SFC did not find any integrity violations. Your system files are in good shape! Congrats, you win a cookie!" }
-		1 { Write-Log "SFC found integrity violations and successfully repaired them. Your system files have been fixed! Great job, you win a gold star!" }
+		1 { Write-Log "SFC found integrity violations and successfully repaired them. Your system files should be okay now. Great job, you win a gold star!" }
 		2 { Write-Log "SFC found integrity violations but was unable to fix some of them. Your system files may still be corrupted. Consider running SFC again or using DISM for further repairs. Don't worry, it's not the end of the world, just a minor setback!" }
-		3 { Write-Log "SFC could not perform the requested operation. The scan may have failed or have been interrupted." }
+		3 { Write-Log "SFC could not perform the requested operation. The scan may have failed or it was interrupted." }
 		default { Write-Log "SFC encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
 	}
 
 	Write-Log ""
 
 } 
+
+#Run DISM
 
 function Run-DISM {
 
@@ -138,10 +140,10 @@ function Run-DISM {
 	Write-Log "DISM scan completed with exit code: $exitCode."
 
 	switch ($exitCode) {
-		0 { Write-Log "DISM did not find any issues with the Windows image. Your system is in good shape! GREAT JOB!" }
-		1 { Write-Log "DISM found issues with the Windows image and successfully repaired them. Your system has been fixed! That is great, now we can get back to work!" }
-		2 { Write-Log "DISM found issues with the Windows image but was unable to fix some of them. Your system may still have problems. Consider running DISM again or I don't know, try something else?" }
-		3 { Write-Log "DISM could not perform the requested operation. The scan may have failed or been interrupted." }
+		0 { Write-Log "DISM completed successfully. Your Windows image appears to be pretty healthy! Keep eating those apples champ!" }
+		1 { Write-Log "DISM found issues with the Windows image. Review the log output for more details." }
+		2 { Write-Log "DISM found issues with the Windows image but was unable to fix some of them. Review the log for more details...or if you are feeling spicy, I have ideas."}
+	 	3 { Write-Log "DISM could not perform the requested operation. The scan may have failed or it was interrupted." }
 		default { Write-Log "DISM encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
 	}
 
@@ -149,16 +151,88 @@ function Run-DISM {
 
 }
 
-#Queue and run CHKDSK with Y
+function Run-CHKDSK {
 
-#if ($LASTEXITCODE -eq 0) {
-#	Write-host "DISM completed successfully. Scheduling CHKDSK on next reboot" | Tee-Object -FilePath $logFile -Append
-#	cmd /c "echo Y|chkdsk C: /f /r /x" | Tee-Object -FilePath $logFile -Append
-#	Write-host "CHKDSK scheduled. Restarting in 30 seconds..." | Tee-Object -FilePath $logFile -Append
-#	shutdown /r /t 30
-#}
-#else {
-#	Write-Host "DISM failed. Check yo logs, sucka." | Tee-Object -FilePath $logFile -Append
-#}
-#
-#"===> Script Completed. Thank you, please come again! <==="
+	$systemDrive = $env:SystemDrive
+	Write-Log "Preparing to schedule CHKDSK on system drive ($systemDrive)."
+
+	if ($UseCHKDSK_R) {
+		$chkdskArgs = "$systemDrive /f /r"
+		Write-Log "CHKDSK will be scheduled with /f and /r. This is a deep scan so it will be thorough but will take an incredibly long time to complete. I'd recommend leaving the computer and coming back later."
+	}
+	else {
+		$chkdskArgs = "$systemDrive /f"
+		Write-Log "CHKDSK will be scheduled with /f. This will attempt to fix any errors it finds. Should be pretty quick, for a CHKDSK at least."
+	}
+
+
+Write-Log "Queuing CHKDSK with automatic confirmation."
+
+cmd.exe /c "echo Y|chkdsk $chkdskArgs" | Tee-Object -FilePath $logFile -Append
+
+$exitCode = $LASTEXITCODE
+Write-Log "CHKDSK scheduling command completed with exit code: $exitCode."
+
+switch ($exitCode) {
+	0 { Write-Log "CHKDSK was successfully scheduled for the next reboot. Your system will be checked for disk errors and repaired if necessary on the next startup. Don't forget to save your work and restart your computer soon!" }
+	1 { Write-Log "CHKDSK scheduling command completed but returned a non-zero exit code. Please check the logs for more details." }
+	default { Write-Log "CHKDSK scheduling command encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
+	}
+
+}
+
+# Execute blocks based on user selection
+
+if ($RunSFC) {
+	Write-Log "RunSFC switch is engaged. Launching SFC scan..."
+	Run-SFC
+}
+else {
+	Write-Log "RunSFC switch is not engaged. Skipping SFC scan. Your system files will remain unscanned and potentially corrupted. But hey, you seem to know what you're doing."
+}
+if ($RunDISM) {
+	Write-Log "RunDISM switch is engaged. Launching DISM scan..."
+	Run-DISM
+}
+else {
+	Write-Log "RunDISM switch is not engaged. Skipping DISM scan. Your Windows image will just be here not being scanned, should be okay, right?"
+}	
+if ($RunCHKDSK) {
+	Write-Log "RunCHKDSK switch is engaged. Launching CHKDSK scheduling..."
+	Run-CHKDSK
+}
+else {
+	Write-Log "RunCHKDSK switch is not engaged. Skipping CHKDSK scheduling. I mean, at least you will have more time to do other things. Hopefully your disk passed the two previous diagnostic checks. If not, well, good luck with that!"
+}
+
+# Reboot if the switch is engaged
+
+function Invoke-RebootPrompt {
+	Write-Log "RebootAfter switch has been engaged."
+	$rebootChoice = Read-Host "Do you want to reboot now to allow CHKDSK to run? (Y/N)"
+
+switch ($rebootChoice.ToUpper()) {
+	"Y" {
+		Write-Log "Reboot confirmed. Restarting the computer now..."
+		Restart-Computer -Force
+	}
+	"YES" {
+		Write-Log "Reboot confirmed. Restarting the computer now..."
+		Restart-Computer -Force
+	}
+	default {
+		Write-Log "Reboot declined. Script will end without restarting."
+	}
+  }
+} 
+
+if ($RebootAfter) {
+	Invoke-RebootPrompt
+}
+else {
+	Write-Log "RebootAfter switch is not engaged. The script will end without prompting for a reboot."
+}
+
+Write-Log "=== WinRepair Script Completed all selected tasks. $(Get-Date) ==="
+Write-Log "That's all folks! No more to see here, I am sure you have other things to do."
+Write-Log "Thank you for using the WinRepair Utility. Have a GREAT day!"
