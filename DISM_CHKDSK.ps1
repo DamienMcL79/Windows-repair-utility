@@ -1,14 +1,47 @@
+#Requires -Version 5.1
+<# 
+.SYNOPSIS
+    WinRepair Utility - Windows System Diagnostics and Repair Script.
+
+.DESCRIPTION
+    Runs SFC, DISM, and CHKDSK to diagnose and repair common Windows issues.
+    Logs all output to a timestamped file. Supports USB log redirection.
+
+.PARAMETER RunSFC
+    Run the System File Checker scan.
+
+.PARAMETER RunDISM
+    Run the DISM image repair scan.
+
+.PARAMETER RunCHKDSK
+    Schedule a CHKDSK scan on the next reboot.
+
+.PARAMETER RebootAfter
+    Prompt the user to reboot after all tasks complete.
+
+.PARAMETER UseCHKDSK_R
+    Run CHKDSK with the /r flag for a deep bad sector scan.
+
+.PARAMETER PreferUSBLog
+    Save logs to a detected USB drive instead of the local drive.
+#>
+
+#region --- Script Parameters ---
+
 [CmdletBinding()]
 param(
-	[switch]$RunSFC,
-	[switch]$RunDISM,
-	[switch]$RunCHKDSK,
+	[switch]$InvokeSFC,
+	[switch]$InvokeDISM,
+	[switch]$InvokeCHKDSK,
 	[switch]$RebootAfter,
 	[switch]$UseCHKDSK_R,
 	[switch]$PreferUSBLog
 )
 
-# Ensure script is running with admin privileges, otherwise re-launch with admin rights
+#endregion
+
+
+# ---Admin Elevation---
 
 function Test-IsAdministrator {
 	$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -24,9 +57,9 @@ function Start-ElevatedSelf {
 		"-File", "`"$PSCommandPath`""
 		)
 
-		if ($RunSFC) { $arguments += "-RunSFC" }
-		if ($RunDISM) { $arguments += "-RunDISM" }
-		if ($RunCHKDSK) { $arguments += "-RunCHKDSK" }
+		if ($InvokeSFC) { $arguments += "-InvokeSFC" }
+		if ($InvokeDISM) { $arguments += "-InvokeDISM" }
+		if ($InvokeCHKDSK) { $arguments += "-InvokeCHKDSK" }
 		if ($RebootAfter) { $arguments += "-RebootAfter" }
 		if ($UseCHKDSK_R) { $arguments += "-UseCHKDSK_R" }
 		if ($PreferUSBLog) { $arguments += "-PreferUSBLog" }	
@@ -39,8 +72,10 @@ if (-not (Test-IsAdministrator)) {
 	Write-Host "We are not running with the correct level of privileges, hold on fam, we about to fix this..." -ForegroundColor Yellow
 	Start-ElevatedSelf
 	}
+#end region
 
-# Determine log location
+
+#region --- Config & Log Setup ---
 
 $defaultLogRoot = Join-Path $env:ProgramData "WinRepairUtility\Logs"
 $logRoot = $defaultLogRoot
@@ -95,17 +130,17 @@ Write-Log "Logs will be saved to: $logFile"
 
 # If no switches are provided, run all checks by default
 
-if (-not ($RunSFC -or $RunDISM -or $RunCHKDSK)) {
+if (-not ($InvokeSFC -or $InvokeDISM -or $InvokeCHKDSK)) {
 	Write-Log "No repair task switches provided. Yay, chaos will reign! Run ALL the things! (SFC, DISM, CHKDSK)"
-	$RunSFC = $true
-	$RunDISM = $true
-	$RunCHKDSK = $true
+	$InvokeSFC = $true
+	$InvokeDISM = $true
+	$InvokeCHKDSK = $true
 }
 else {
 	Write-Log "Repair task switches detected, we will run only the specified tasks. Your choice, your consequences!"
 }
 
-Write-Log "Task selection: Run SFC: $RunSFC, Run DISM: $RunDISM, Run CHKDSK: $RunCHKDSK"
+Write-Log "Task selection: SFC: $InvokeSFC, DISM: $InvokeDISM, CHKDSK: $InvokeCHKDSK"
 
 #Run SFC 
 
@@ -183,26 +218,26 @@ switch ($exitCode) {
 
 # Execute blocks based on user selection
 
-if ($RunSFC) {
-	Write-Log "RunSFC switch is engaged. Launching SFC scan..."
-	Run-SFC
+if ($InvokeDISM) {
+	Write-Log "DISM switch is engaged. Launching DISM scan..."
+	Invoke-DISM
 }
 else {
-	Write-Log "RunSFC switch is not engaged. Skipping SFC scan. Your system files will remain unscanned and potentially corrupted. But hey, you seem to know what you're doing."
+	Write-Log "DISM switch is not engaged. Skipping DISM scan. Your Windows image will just be here not being scanned, should be okay, right?"
 }
-if ($RunDISM) {
-	Write-Log "RunDISM switch is engaged. Launching DISM scan..."
-	Run-DISM
+if ($InvokeSFC) {
+	Write-Log "SFC switch is engaged. Launching SFC scan..."
+	Invoke-SFC
 }
 else {
-	Write-Log "RunDISM switch is not engaged. Skipping DISM scan. Your Windows image will just be here not being scanned, should be okay, right?"
+	Write-Log "SFC switch is not engaged. Skipping SFC scan. Your system files will remain unscanned and potentially corrupted. But hey, you seem to know what you're doing."
 }	
-if ($RunCHKDSK) {
-	Write-Log "RunCHKDSK switch is engaged. Launching CHKDSK scheduling..."
-	Run-CHKDSK
+if ($InvokeCHKDSK) {
+	Write-Log "CHKDSK switch is engaged. Launching CHKDSK scheduling..."
+	Invoke-CHKDSK
 }
 else {
-	Write-Log "RunCHKDSK switch is not engaged. Skipping CHKDSK scheduling. I mean, at least you will have more time to do other things. Hopefully your disk passed the two previous diagnostic checks. If not, well, good luck with that!"
+	Write-Log "CHKDSK switch is not engaged. Skipping CHKDSK scheduling. I mean, at least you will have more time to do other things. Hopefully your disk passed the two previous diagnostic checks. If not, well, good luck with that!"
 }
 
 # Reboot if the switch is engaged
