@@ -109,7 +109,7 @@ Write-Log "Task selection: Run SFC: $RunSFC, Run DISM: $RunDISM, Run CHKDSK: $Ru
 
 #Run SFC 
 
-function Run-SFC {
+function Invoke-SFC {
 
 	Write-Log "Starting System File Checker (SFC) scan. This may take a while. Go ahead, check out the break room, stretch your legs, maybe go touch some grass. I'll be here when you get back."
 	sfc /scannow | Tee-Object -FilePath $logFile -Append
@@ -130,7 +130,7 @@ function Run-SFC {
 
 #Run DISM
 
-function Run-DISM {
+function Invoke-DISM {
 
 	Write-Log "Starting Deployment Image Servicing and Management (DISM) scan. (It is really nerdy that I know the meanings of these acronyms, isn't it?) This will check the health of the Windows image and attempt repairs if necessary. Grab a coffee, this might take a bit."
 	
@@ -151,7 +151,7 @@ function Run-DISM {
 
 }
 
-function Run-CHKDSK {
+function Invoke-CHKDSK {
 
 	$systemDrive = $env:SystemDrive
 	Write-Log "Preparing to schedule CHKDSK on system drive ($systemDrive)."
