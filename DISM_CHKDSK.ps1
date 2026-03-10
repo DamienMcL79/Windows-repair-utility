@@ -23,6 +23,13 @@ function Start-ElevatedSelf {
 		"-ExecutionPolicy", "Bypass",
 		"-File", "`"$PSCommandPath`""
 		)
+
+		if ($RunSFC) { $arguments += "-RunSFC" }
+		if ($RunDISM) { $arguments += "-RunDISM" }
+		if ($RunCHKDSK) { $arguments += "-RunCHKDSK" }
+		if ($RebootAfter) { $arguments += "-RebootAfter" }
+		if ($UseCHKDSK_R) { $arguments += "-UseCHKDSK_R" }
+		if ($PreferUSBLog) { $arguments += "-PreferUSBLog" }	
 	
 	Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs
 	exit
@@ -69,18 +76,22 @@ $logFile = Join-Path $logRoot "WinRepair_$timestamp.log"
 
 function Write-Log {
 	param(
-		[Parameter(Mandatory)]
 		[string]$Message
 	)
-
+	if ([string]::IsNullOrWhiteSpace($Message)) {
+		Write_Host ""
+		Add-Content -Path $LogFile -Value ""
+		return
+	}
 	$timeStamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 	$logEntry = "[$timeStamp] $Message"
 
 	Write-Host $logEntry
 	Add-Content -Path $logFile -Value $logEntry
-	}
+}
 
-Write-Log "Oh, now you are making me write logs? Alright, I guess I can do that."
+Write-Log "Oh great, now you are making me write logs? Like I didn't have anything better to do? I guess, whatever..."
+Write-Log "Logs will be saved to: $logFile"
 
 # If no switches are provided, run all checks by default
 
@@ -93,6 +104,8 @@ if (-not ($RunSFC -or $RunDISM -or $RunCHKDSK)) {
 else {
 	Write-Log "Repair task switches detected, we will run only the specified tasks. Your choice, your consequences!"
 }
+
+Write-Log "Task selection: Run SFC: $RunSFC, Run DISM: $RunDISM, Run CHKDSK: $RunCHKDSK"
 
 #Run SFC 
 #"Running SFC /scannow" | Tee-Object -filePath %logFile -Append
