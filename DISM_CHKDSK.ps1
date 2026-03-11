@@ -7,7 +7,8 @@
 
 .DESCRIPTION
     Runs SFC, DISM, and CHKDSK to diagnose and repair common Windows issues.
-    Logs all output to a timestamped file. Supports USB log redirection.
+    Logs all output to a timestamped file. Automatically detects USB drives 
+	and prompts the user to save logs there if one is found.
 
 .PARAMETER InvokeSFC
     Run the System File Checker scan.
@@ -23,9 +24,6 @@
 
 .PARAMETER UseCHKDSK_R
     Run CHKDSK with the /r flag for a deep bad sector scan.
-
-.PARAMETER PreferUSBLog
-    Save logs to a detected USB drive instead of the local drive.
 #>
 
 #endregion
@@ -39,7 +37,6 @@ param(
 	[switch]$InvokeCHKDSK,
 	[switch]$RebootAfter,
 	[switch]$UseCHKDSK_R,
-	[switch]$PreferUSBLog
 )
 
 #endregion
@@ -66,7 +63,6 @@ function Start-ElevatedSelf {
 		if ($InvokeCHKDSK) { $arguments += "-InvokeCHKDSK" }
 		if ($RebootAfter) { $arguments += "-RebootAfter" }
 		if ($UseCHKDSK_R) { $arguments += "-UseCHKDSK_R" }
-		if ($PreferUSBLog) { $arguments += "-PreferUSBLog" }	
 	
 	Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs
 	exit
