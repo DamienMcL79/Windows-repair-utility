@@ -84,18 +84,30 @@ if (-not (Test-IsAdministrator)) {
 $defaultLogRoot = Join-Path $env:ProgramData "WinRepairUtility\Logs"
 $logRoot = $defaultLogRoot
 
-if ($PreferUSBLog) {
-	$usbDrive = Get-CimInstance Win32_LogicalDisk |
-		Where-Object { $_.DriveType -eq 2 } |
-		Select-Object -ExpandProperty DeviceID -First 1
+$usbDrive = Get-CimInstance Win32_LogicalDisk |
+	Where-Object { $_.DriveType -eq 2 } |
+	Select-Object -ExpandProperty DeviceID -First 1
 
-    if ($usbDrive) {
+if ($usbDrive) {
+
+	Write-Host ""
+	Write-Host "USB drive detected: $usbDrive." -ForegroundColor Green
+
+	$usbChoice = Read-Host "Do you want to save logs to your fancy USB drive? (Y/N)"
+
+	if ($usbChoice.ToUpper() -in @("Y","YES"))	{
+
 		$logRoot = Join-Path $usbDrive "WinRepairUtility\Logs"
-		Write-Host "So, you inserted a USB drive, aren't YOU fancy? GOOD! Your logs will be saved to $logRoot" -ForegroundColor Green
+		Write-Host "Logs will be saved to the USB drive at: $logRoot" -ForegroundColor Green
 	}
 	else {
-		Write-Host "No USB drive detected, logs will be saved to local drive at: $defaultLogRoot" -ForegroundColor Cyan
+
+		Write-Host "Logs will be saved locally at: $defaultLogRoot" -ForegroundColor Cyan
 	}
+}
+else {
+
+	Write-Host "No USB drive detected. Logs will be saved locally at: $defaultLogRoot" -ForegroundColor Cyan
 }
 
 if (-not (Test-Path -Path $logRoot)) {
