@@ -36,7 +36,7 @@ param(
 	[switch]$InvokeDISM,
 	[switch]$InvokeCHKDSK,
 	[switch]$RebootAfter,
-	[switch]$UseCHKDSK_R,
+	[switch]$UseCHKDSK_R
 )
 
 #endregion
