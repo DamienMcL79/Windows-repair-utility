@@ -1,4 +1,6 @@
 #Requires -Version 5.1
+#region --- METADATA BLOCK ---
+
 <# 
 .SYNOPSIS
     WinRepair Utility - Windows System Diagnostics and Repair Script.
@@ -7,13 +9,13 @@
     Runs SFC, DISM, and CHKDSK to diagnose and repair common Windows issues.
     Logs all output to a timestamped file. Supports USB log redirection.
 
-.PARAMETER RunSFC
+.PARAMETER InvokeSFC
     Run the System File Checker scan.
 
-.PARAMETER RunDISM
+.PARAMETER InvokeDISM
     Run the DISM image repair scan.
 
-.PARAMETER RunCHKDSK
+.PARAMETER InvokeCHKDSK
     Schedule a CHKDSK scan on the next reboot.
 
 .PARAMETER RebootAfter
@@ -26,7 +28,9 @@
     Save logs to a detected USB drive instead of the local drive.
 #>
 
-#region --- Script Parameters ---
+#endregion
+
+#region --- SCRIPT PARAMETERS ---
 
 [CmdletBinding()]
 param(
@@ -41,7 +45,7 @@ param(
 #endregion
 
 
-# Region---Admin Elevation---
+# region--- ADMIN ELEVATION ---
 
 function Test-IsAdministrator {
 	$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -72,10 +76,10 @@ if (-not (Test-IsAdministrator)) {
 	Write-Host "We are not running with the correct level of privileges, hold on fam, we about to fix this..." -ForegroundColor Yellow
 	Start-ElevatedSelf
 	}
-#end region
+#endregion
 
 
-#region --- Config & Log Setup ---
+#region --- CONFIG & LOG SETUP ---
 
 $defaultLogRoot = Join-Path $env:ProgramData "WinRepairUtility\Logs"
 $logRoot = $defaultLogRoot
@@ -106,7 +110,7 @@ $logFile = Join-Path $logRoot "WinRepair_$timestamp.log"
 #endregion
 
 
-#region --- Helper Functions ---
+#region --- HELPER FUNCTIONS ---
 
 function Write-Log {
 	param(
@@ -126,7 +130,7 @@ function Write-Log {
 	Add-Content -Path $logFile -Value $logEntry
 }
 
-#end region
+#endregion
 
 
 #region --- STARTUP LOGGING & TASK SELECTION ---
@@ -146,7 +150,7 @@ else {
 
 Write-Log "Task selection: SFC: $InvokeSFC, DISM: $InvokeDISM, CHKDSK: $InvokeCHKDSK"
 
-#end region
+#endregion
 
 
 #region ---REPAIR FUNCTIONS---
@@ -231,7 +235,7 @@ function Invoke-RebootPrompt {
   	}
 } 
 
-#end region
+#endregion
 
 
 #region --- MAIN EXECUTION ---
@@ -271,4 +275,4 @@ Write-Log "=== WinRepair Script Completed all selected tasks. $(Get-Date) ==="
 Write-Log "That's all folks! No more to see here, I am sure you have other things to do."
 Write-Log "Thank you for using the WinRepair Utility. Have a GREAT day!"
 
-#end region
+#endregion
