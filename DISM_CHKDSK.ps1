@@ -41,7 +41,7 @@ param(
 #endregion
 
 
-# ---Admin Elevation---
+# Region---Admin Elevation---
 
 function Test-IsAdministrator {
 	$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -82,9 +82,8 @@ $logRoot = $defaultLogRoot
 
 if ($PreferUSBLog) {
 	$usbDrive = Get-CimInstance Win32_LogicalDisk |
-	Where-Object { $_.DriveType -eq 2 } |
-	Select-Object -ExpandProperty DeviceID -First 1
-
+		Where-Object { $_.DriveType -eq 2 } |
+		Select-Object -ExpandProperty DeviceID -First 1
 
     if ($usbDrive) {
 		$logRoot = Join-Path $usbDrive "WinRepairUtility\Logs"
@@ -94,30 +93,32 @@ if ($PreferUSBLog) {
 		Write-Host "No USB drive detected, logs will be saved to local drive at: $defaultLogRoot" -ForegroundColor Cyan
 	}
 }
-#Create log folder if it doesn't exist
 
 if (-not (Test-Path -Path $logRoot)) {
 	New-Item -Path $logRoot -ItemType Directory -Force | Out-Null
 }
 
-#Define log file with timestamp
-
 $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 $logFile = Join-Path $logRoot "WinRepair_$timestamp.log"
 
-#Write initial log entry
-
 "=== WinRepair Script Started: $(Get-Date) ===" | Out-File -FilePath $logFile -Encoding utf8
+
+#endregion
+
+
+#region --- Helper Functions ---
 
 function Write-Log {
 	param(
 		[string]$Message
 	)
+
 	if ([string]::IsNullOrWhiteSpace($Message)) {
 		Write-Host ""
 		Add-Content -Path $logFile -Value ""
 		return
 	}
+
 	$timeStamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 	$logEntry = "[$timeStamp] $Message"
 
@@ -125,10 +126,13 @@ function Write-Log {
 	Add-Content -Path $logFile -Value $logEntry
 }
 
+#end region
+
+
+#region --- STARTUP LOGGING & TASK SELECTION ---
+
 Write-Log "Oh great, now you are making me write logs? Like I didn't have anything better to do? I guess, whatever..."
 Write-Log "Logs will be saved to: $logFile"
-
-# If no switches are provided, run all checks by default
 
 if (-not ($InvokeSFC -or $InvokeDISM -or $InvokeCHKDSK)) {
 	Write-Log "No repair task switches provided. Yay, chaos will reign! Run ALL the things! (SFC, DISM, CHKDSK)"
@@ -142,31 +146,12 @@ else {
 
 Write-Log "Task selection: SFC: $InvokeSFC, DISM: $InvokeDISM, CHKDSK: $InvokeCHKDSK"
 
-#Run SFC 
+#end region
 
-function Invoke-SFC {
 
-	Write-Log "Starting System File Checker (SFC) scan. This may take a while. Go ahead, check out the break room, stretch your legs, maybe go touch some grass. I'll be here when you get back."
-	sfc /scannow | Tee-Object -FilePath $logFile -Append
-	$exitCode = $LASTEXITCODE
-	Write-Log "SFC scan completed with exit code: $exitCode."
-
-	switch ($exitCode){
-		0 { Write-Log "SFC did not find any integrity violations. Your system files are in good shape! Congrats, you win a cookie!" }
-		1 { Write-Log "SFC found integrity violations and successfully repaired them. Your system files should be okay now. Great job, you win a gold star!" }
-		2 { Write-Log "SFC found integrity violations but was unable to fix some of them. Your system files may still be corrupted. Consider running SFC again or using DISM for further repairs. Don't worry, it's not the end of the world, just a minor setback!" }
-		3 { Write-Log "SFC could not perform the requested operation. The scan may have failed or it was interrupted." }
-		default { Write-Log "SFC encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
-	}
-
-	Write-Log ""
-
-} 
-
-#Run DISM
+#region ---REPAIR FUNCTIONS---
 
 function Invoke-DISM {
-
 	Write-Log "Starting Deployment Image Servicing and Management (DISM) scan. (It is really nerdy that I know the meanings of these acronyms, isn't it?) This will check the health of the Windows image and attempt repairs if necessary. Grab a coffee, this might take a bit."
 	
 	DISM /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
@@ -183,11 +168,28 @@ function Invoke-DISM {
 	}
 
 	Write-Log ""
-
 }
 
-function Invoke-CHKDSK {
+function Invoke-SFC {
+	Write-Log "Starting System File Checker (SFC) scan. This may take a while. Go ahead, check out the break room, stretch your legs, maybe go touch some grass. I'll be here when you get back."
 
+	sfc /scannow | Tee-Object -FilePath $logFile -Append
+
+	$exitCode = $LASTEXITCODE
+	Write-Log "SFC scan completed with exit code: $exitCode."
+
+	switch ($exitCode){
+		0 { Write-Log "SFC did not find any integrity violations. Your system files are in good shape! Congrats, you win a cookie!" }
+		1 { Write-Log "SFC found integrity violations and successfully repaired them. Your system files should be okay now. Great job, you win a gold star!" }
+		2 { Write-Log "SFC found integrity violations but was unable to fix some of them. Your system files may still be corrupted. Consider running SFC again or using DISM for further repairs. Don't worry, it's not the end of the world, just a minor setback!" }
+		3 { Write-Log "SFC could not perform the requested operation. The scan may have failed or it was interrupted." }
+		default { Write-Log "SFC encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
+	}
+
+	Write-Log ""
+} 
+
+function Invoke-CHKDSK {
 	$systemDrive = $env:SystemDrive
 	Write-Log "Preparing to schedule CHKDSK on system drive ($systemDrive)."
 
@@ -200,23 +202,39 @@ function Invoke-CHKDSK {
 		Write-Log "CHKDSK will be scheduled with /f. This will attempt to fix any errors it finds. Should be pretty quick, for a CHKDSK at least."
 	}
 
+	Write-Log "Queuing CHKDSK with automatic confirmation."
 
-Write-Log "Queuing CHKDSK with automatic confirmation."
+	cmd.exe /c "echo Y|chkdsk $chkdskArgs" | Tee-Object -FilePath $logFile -Append
 
-cmd.exe /c "echo Y|chkdsk $chkdskArgs" | Tee-Object -FilePath $logFile -Append
+	$exitCode = $LASTEXITCODE
+	Write-Log "CHKDSK scheduling command completed with exit code: $exitCode."
 
-$exitCode = $LASTEXITCODE
-Write-Log "CHKDSK scheduling command completed with exit code: $exitCode."
-
-switch ($exitCode) {
-	0 { Write-Log "CHKDSK was successfully scheduled for the next reboot. Your system will be checked for disk errors and repaired if necessary on the next startup. Don't forget to save your work and restart your computer soon!" }
-	1 { Write-Log "CHKDSK scheduling command completed but returned a non-zero exit code. Please check the logs for more details." }
-	default { Write-Log "CHKDSK scheduling command encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
+	switch ($exitCode) {
+		0 { Write-Log "CHKDSK was successfully scheduled for the next reboot. Your system will be checked for disk errors and repaired if necessary on the next startup. Don't forget to save your work and restart your computer soon!" }
+		1 { Write-Log "CHKDSK scheduling command completed but returned a non-zero exit code. Please check the logs for more details." }
+		default { Write-Log "CHKDSK scheduling command encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
 	}
-
 }
 
-# Execute blocks based on user selection
+function Invoke-RebootPrompt {
+	Write-Log "Reboot switch has been engaged."
+	$rebootChoice = Read-Host "Do you want to reboot now to allow CHKDSK to run? (Y/N)"
+
+	switch ($rebootChoice.ToUpper()) {
+		{$_ -in @("Y", "YES")} {
+			Write-Log "Rebooting now. See you on the other side!"
+			Restart-Computer -Force
+		}
+		default {
+			Write-Log "Reboot declined. Script will end without restarting."
+		}
+  	}
+} 
+
+#end region
+
+
+#region --- MAIN EXECUTION ---
 
 if ($InvokeDISM) {
 	Write-Log "DISM switch is engaged. Launching DISM scan..."
@@ -225,6 +243,7 @@ if ($InvokeDISM) {
 else {
 	Write-Log "DISM switch is not engaged. Skipping DISM scan. Your Windows image will just be here not being scanned, should be okay, right?"
 }
+
 if ($InvokeSFC) {
 	Write-Log "SFC switch is engaged. Launching SFC scan..."
 	Invoke-SFC
@@ -232,6 +251,7 @@ if ($InvokeSFC) {
 else {
 	Write-Log "SFC switch is not engaged. Skipping SFC scan. Your system files will remain unscanned and potentially corrupted. But hey, you seem to know what you're doing."
 }	
+
 if ($InvokeCHKDSK) {
 	Write-Log "CHKDSK switch is engaged. Launching CHKDSK scheduling..."
 	Invoke-CHKDSK
@@ -239,27 +259,6 @@ if ($InvokeCHKDSK) {
 else {
 	Write-Log "CHKDSK switch is not engaged. Skipping CHKDSK scheduling. I mean, at least you will have more time to do other things. Hopefully your disk passed the two previous diagnostic checks. If not, well, good luck with that!"
 }
-
-# Reboot if the switch is engaged
-
-function Invoke-RebootPrompt {
-	Write-Log "RebootAfter switch has been engaged."
-	$rebootChoice = Read-Host "Do you want to reboot now to allow CHKDSK to run? (Y/N)"
-
-switch ($rebootChoice.ToUpper()) {
-	"Y" {
-		Write-Log "Reboot confirmed. Restarting the computer now..."
-		Restart-Computer -Force
-	}
-	"YES" {
-		Write-Log "Reboot confirmed. Restarting the computer now..."
-		Restart-Computer -Force
-	}
-	default {
-		Write-Log "Reboot declined. Script will end without restarting."
-	}
-  }
-} 
 
 if ($RebootAfter) {
 	Invoke-RebootPrompt
@@ -271,3 +270,5 @@ else {
 Write-Log "=== WinRepair Script Completed all selected tasks. $(Get-Date) ==="
 Write-Log "That's all folks! No more to see here, I am sure you have other things to do."
 Write-Log "Thank you for using the WinRepair Utility. Have a GREAT day!"
+
+#end region
