@@ -24,16 +24,6 @@
 
 .PARAMETER UseCHKDSK_R
     Run CHKDSK with the /r flag for a deep bad sector scan.
-
-.PARAMETER SFC
-	Alias for InvokeSFC.
-
-.PARAMETER DISM
-	Alias for InvokeDISM.
-
-.PARAMETER CHKDSK
-	Alias for InvokeCHKDSK.
-
 #>
 
 #endregion
@@ -42,27 +32,15 @@
 
 [CmdletBinding()]
 param(
-	# Internal command switches. 
 	[switch]$InvokeSFC,
 	[switch]$InvokeDISM,
 	[switch]$InvokeCHKDSK,
-	
-
-	# User-friendly aliases.
-	[switch]$SFC,
-	[switch]$DISM,
-	[switch]$CHKDSK,
-
-	# Options.
 	[switch]$RebootAfter,
 	[switch]$UseCHKDSK_R
 )
 
-if ($SFC) { $InvokeSFC = $true }
-if ($DISM) { $InvokeDISM = $true }
-if ($CHKDSK) { $InvokeCHKDSK = $true }
-
 #endregion
+
 
 # region--- ADMIN ELEVATION ---
 
