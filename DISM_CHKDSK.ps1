@@ -242,6 +242,12 @@ function Set-DeepScanProfile{
 
 #endregion
 
+#region --- MENU SUPPORT FUNCTIONS ---
+
+
+
+#endregion
+
 #region --- STARTUP LOGGING & TASK SELECTION ---
 
 Write-Log "Oh great, now you are making me write logs? Like I didn't have anything better to do? I guess, whatever..."
@@ -377,6 +383,17 @@ function Invoke-AutoReboot {
 
 #endregion
 
+#region --- MENU SYSTEMFUNCTION ---
+
+function Exit-WinRepair {
+	Write-Log ""
+	Write-Log "Exiting WinRepair. Thank you for using the WinRepair Utility. Have a GREAT day!"
+	Write-Log "Returning to command line..."
+	Write-Log ""
+	exit 	
+}
+
+#endregion
 
 #region --- MAIN EXECUTION ---
 
