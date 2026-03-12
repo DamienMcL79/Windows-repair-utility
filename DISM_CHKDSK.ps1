@@ -137,6 +137,8 @@ $logFile = Join-Path $logRoot "WinRepair_$timestamp.log"
 
 "=== WinRepair Script Started: $(Get-Date) ===" | Out-File -FilePath $logFile -Encoding utf8
 
+$script:UseDeepDISM = $false
+$script:ForceAutoReboot = $false
 #endregion
 
 
@@ -160,8 +162,85 @@ function Write-Log {
 	Add-Content -Path $logFile -Value $logEntry
 }
 
+function Confirm-CHKDSKReboot {
+	Write-Host ""
+	Write-Host "WARNING:" -ForegroundColor Red
+	Write-Host "This option includes CHKDSK on the system drive."
+	Write-Host "CHKDSK cannot complete while Windows is running and WILL be scheuled for the next reboot."
+	Write-Host "By continuing, the system will automatically reboot after the repair scans complete."
+	Write-Host "There will be NO FURTHER reboot confirmation prompt prior to the system reboot."
+	Write-Host ""
+
+	$confirm1 = Read-Host "Are you sure you want to proceed with this option? (Y/N)"
+
+	if ($confirm1.ToUpper() -notin @("Y", "YES")) {
+		Write-Host "Returning to main menu..." -ForegroundColor Yellow
+		return $false
+	}
+
+	$confirm2 = Read-Host "Are you absolutely sure? Last chance. (Y/N)"
+
+	if ($confirm2.ToUpper() -notin @("Y", "YES")) {
+		Write-Host "Returning to main menu..." -ForegroundColor Yellow
+		return $false
+	}
+
+	Write-Host "Confirmation accepted. Now would be a great time to pull out a book, this is going to be a while...proceeding with the scan." -ForegroundColor Green
+
+}
+
 #endregion
 
+#region --- QUICK-SELECT HELPER FUNCTIONS
+
+function Set-QuickScanProfile{
+	$script:InvokeDISM = $true
+	$script:InvokeSFC = $true
+	$script:InvokeCHKDSK = $false
+	$script:UseCHKDSK_R = $false
+	$script:RebootAfter = $false
+	$script:UseDeepDISM = $false
+
+	Write-Log "Quick Scan selected. This will run DISM followed by SFC."
+
+}
+
+function Set-EnhancedScanProfile{
+	if (-not (Confirm-CHKDSKReboot)) {
+		return $false
+	}
+
+	$script:InvokeDISM = $true
+	$script:InvokeSFC = $true
+	$script:InvokeCHKDSK = $true
+	$script:UseCHKDSK_R = $false
+	$script:RebootAfter = $true
+	$script:UseDeepDISM = $false
+	$script:ForceAutoReboot = $true
+
+	Write-Log "Enhanced Scan selected. This will run DISM followed by SFC and then CHKDSK upon an automatic reboot once the first two scans are complete."
+	return $true
+}
+
+function Set-DeepScanProfile{
+		if (-not (Confirm-CHKDSKReboot)) {
+		return $false
+	}
+
+	$script:InvokeDISM = $true
+	$script:InvokeSFC = $true
+	$script:InvokeCHKDSK = $true
+	$script:UseCHKDSK_R = $true
+	$script:RebootAfter = $true
+	$script:UseDeepDISM = $true
+	$script:ForceAutoReboot = $true
+
+	Write-Log "Deep Scan selected. This will run DISM followed by SFC and then CHKDSK upon an automatic reboot once the first two scans are complete."
+	return $true
+
+}
+
+#endregion
 
 #region --- STARTUP LOGGING & TASK SELECTION ---
 
@@ -186,19 +265,43 @@ Write-Log "Task selection: SFC: $InvokeSFC, DISM: $InvokeDISM, CHKDSK: $InvokeCH
 #region ---REPAIR FUNCTIONS---
 
 function Invoke-DISM {
-	Write-Log "Starting Deployment Image Servicing and Management (DISM) scan. (It is really nerdy that I know the meanings of these acronyms, isn't it?) This will check the health of the Windows image and attempt repairs if necessary. Grab a coffee, this might take a bit."
+	Write-Log "Starting Deployment Image Servicing and Management (DISM) scan. This will check the health of the Windows image and attempt repairs if necessary."
+	Write-Log "Grab a coffee, this might take a bit."
 	
-	DISM /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
+	if ($script:UseDeepDISM) {
+		Write-Log "Deep DISM mode enabled. DISM will run ScanHealth before RestoreHealth."
+		Write-Log "This will allow DISM to check for component store corruption. This will take a while."
+		
+		DISM /Online /Cleanup-Image /ScanHealth | Tee-Object -FilePath $logFile -Append
+		
+		$scanExitCode = $LASTEXITCODE
+		Write-Log "DISM ScanHealth completed with exit code: $scanExitCode."
 
-	$exitCode = $LASTEXITCODE
-	Write-Log "DISM scan completed with exit code: $exitCode."
+		switch ($scanExitCode) {
+			0 { Write-Log "DISM ScanHealth completed successfully." }
+			1 { Write-Log "DISM ScanHealth found issues with your Windows image. Review the log output for more details." }
+			2 { Write-Log "DISM ScanHealth found issues with your Windows image and further corrective action may be required. Review the log for more details." }
+	 		3 { Write-Log "DISM ScanHealth could not perform the requested operation. The scan may have failed or it was interrupted." }
+			default { Write-Log "DISM ScanHealth encountered an unexpected error with exit code: $scanExitCode. Please check the logs for more details." }
+	}
 
-	switch ($exitCode) {
-		0 { Write-Log "DISM completed successfully. Your Windows image appears to be pretty healthy! Keep eating those apples champ!" }
-		1 { Write-Log "DISM found issues with the Windows image. Review the log output for more details." }
-		2 { Write-Log "DISM found issues with the Windows image but was unable to fix some of them. Review the log for more details...or if you are feeling spicy, I have ideas."}
-	 	3 { Write-Log "DISM could not perform the requested operation. The scan may have failed or it was interrupted." }
-		default { Write-Log "DISM encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
+		Write-Log ""
+	}
+
+		Write-Log "Running DISM RestoreHealth. This will check the health of your Windows image and attempt repairs if necessary."
+		Write-Log "This will take quite a while. You may want to go grab a coffee."
+
+		DISM /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
+		
+		$exitCode = $LASTEXITCODE
+		Write-Log "DISM RestoreHealth completed with exit code: $exitCode."
+
+		switch ($exitCode) {
+			0 { Write-Log "DISM RestoreHealth completed successfully. Your Windows image appears to be pretty healthy! Good job!" }
+			1 { Write-Log "DISM RestoreHealth found issues with the Windows image. Review the log output for more details." }
+			2 { Write-Log "DISM RestoreHealth found issues with the Windows image but was unable to fix some of them. Review the log for more details."}
+	 		3 { Write-Log "DISM RestoreHealth could not perform the requested operation. The scan may have failed or it was interrupted." }
+			default { Write-Log "DISM RestoreHealth encountered an unexpected error with exit code: $exitCode. Please check the logs for more details." }
 	}
 
 	Write-Log ""
@@ -265,6 +368,13 @@ function Invoke-RebootPrompt {
   	}
 } 
 
+function Invoke-AutoReboot {
+	Write-Log "Automatic reboot has been scheduled. System will reboot in 30 seconds with no further prompts."
+	Write-Log "Please save all your work and close any open applications immediately to avoid data loss."
+
+	shutdown.exe /r /t 30 /c "WinRepair has completed DISM and SFC scans and is rebooting to complete final scan."
+}
+
 #endregion
 
 
@@ -295,7 +405,13 @@ else {
 }
 
 if ($RebootAfter) {
-	Invoke-RebootPrompt
+	if ($script:ForceAutoReboot) {
+		Write-Log "Automatic reboot mode is enabled for this scan profile."
+		Invoke-AutoReboot
+	}
+	else {
+		Invoke-RebootPrompt
+	}
 }
 else {
 	Write-Log "RebootAfter switch is not engaged. The script will end without prompting for a reboot."
