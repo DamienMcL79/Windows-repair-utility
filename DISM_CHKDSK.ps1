@@ -166,7 +166,7 @@ function Confirm-CHKDSKReboot {
 	Write-Host ""
 	Write-Host "WARNING:" -ForegroundColor Red
 	Write-Host "This option includes CHKDSK on the system drive."
-	Write-Host "CHKDSK cannot complete while Windows is running and WILL be scheuled for the next reboot."
+	Write-Host "CHKDSK cannot complete while Windows is running and WILL be scheduled for the next reboot."
 	Write-Host "By continuing, the system will automatically reboot after the repair scans complete."
 	Write-Host "There will be NO FURTHER reboot confirmation prompt prior to the system reboot."
 	Write-Host ""
@@ -187,6 +187,7 @@ function Confirm-CHKDSKReboot {
 
 	Write-Host "Confirmation accepted. Now would be a great time to pull out a book, this is going to be a while...proceeding with the scan." -ForegroundColor Green
 
+	return $true
 }
 
 #endregion
@@ -199,9 +200,9 @@ function Set-QuickScanProfile{
 	$script:InvokeCHKDSK = $false
 	$script:UseCHKDSK_R = $false
 	$script:RebootAfter = $false
-	$script:DISMMode = "CheckHealth"
+	$script:DISMMode = "ScanHealth"
 
-	Write-Log "Quick Scan selected. This will run DISM CheckHealth followed by SFC."
+	Write-Log "Quick Scan selected. This will run DISM ScanHealth followed by SFC."
 
 }
 
@@ -326,8 +327,8 @@ function Invoke-DISM {
 			}
 		}
 		"RestoreHealth" {
-			Write-Log "Running DISM Restore Health. This scand the Windows component store for corruption and attempts repairs."
-			Write-Log "This process can take a while, especaially if corruption is found and a repair is neccessary."
+			Write-Log "Running DISM Restore Health. This will scan the Windows component store for corruption and attempts repairs."
+			Write-Log "This process can take a while, especially if corruption is found and a repair is necessary."
 
 			DISM.exe /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
 
@@ -454,13 +455,9 @@ function Exit-WinRepair {
 if ($InvokeDISM) {
 	Write-Log "DISM switch is engaged. Launching DISM scan..."
 
-	if (Invoke-DISM) {
-		Write-Log "DISM switch engaged. Launching DISM operation..."
-
-		if (-not (Invoke-DISM)) {
+	if (-not (Invoke-DISM)) {
 			Write-Log "DISM stage reported that the workflow should stop. Main execution is halding now."
 			return
-		}
 	}
 	else {
 		Write-Log "DISM switch is not engaged. Skipping DISM operation."
