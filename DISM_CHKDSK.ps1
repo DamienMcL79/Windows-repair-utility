@@ -456,12 +456,12 @@ if ($InvokeDISM) {
 	Write-Log "DISM switch is engaged. Launching DISM scan..."
 
 	if (-not (Invoke-DISM)) {
-			Write-Log "DISM stage reported that the workflow should stop. Main execution is halding now."
-			return
+		Write-Log "DISM stage reported that the workflow should stop. Main execution is halting now."
+		return
 	}
-	else {
+}
+else {
 		Write-Log "DISM switch is not engaged. Skipping DISM operation."
-	}
 }
 
 if ($InvokeSFC) {
