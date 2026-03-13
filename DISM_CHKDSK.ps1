@@ -137,7 +137,7 @@ $logFile = Join-Path $logRoot "WinRepair_$timestamp.log"
 
 "=== WinRepair Script Started: $(Get-Date) ===" | Out-File -FilePath $logFile -Encoding utf8
 
-$script:UseDeepDISM = $false
+$script:DISMMode = $null
 $script:ForceAutoReboot = $false
 #endregion
 
@@ -191,7 +191,7 @@ function Confirm-CHKDSKReboot {
 
 #endregion
 
-#region --- QUICK-SELECT HELPER FUNCTIONS
+#region --- QUICK-SELECT HELPER FUNCTIONS --- 
 
 function Set-QuickScanProfile{
 	$script:InvokeDISM = $true
@@ -199,9 +199,9 @@ function Set-QuickScanProfile{
 	$script:InvokeCHKDSK = $false
 	$script:UseCHKDSK_R = $false
 	$script:RebootAfter = $false
-	$script:UseDeepDISM = $false
+	$script:DISMMode = "CheckHealth"
 
-	Write-Log "Quick Scan selected. This will run DISM followed by SFC."
+	Write-Log "Quick Scan selected. This will run DISM CheckHealth followed by SFC."
 
 }
 
@@ -213,12 +213,15 @@ function Set-EnhancedScanProfile{
 	$script:InvokeDISM = $true
 	$script:InvokeSFC = $true
 	$script:InvokeCHKDSK = $true
+
 	$script:UseCHKDSK_R = $false
 	$script:RebootAfter = $true
-	$script:UseDeepDISM = $false
 	$script:ForceAutoReboot = $true
+	
+	$script:DISMMode = "ScanHealth"
+	
 
-	Write-Log "Enhanced Scan selected. This will run DISM followed by SFC and then CHKDSK upon an automatic reboot once the first two scans are complete."
+	Write-Log "Enhanced Scan selected. This will run DISM ScanHealth, followed by SFC, and then CHKDSK upon an automatic reboot once the first two scans are complete."
 	return $true
 }
 
@@ -232,10 +235,10 @@ function Set-DeepScanProfile{
 	$script:InvokeCHKDSK = $true
 	$script:UseCHKDSK_R = $true
 	$script:RebootAfter = $true
-	$script:UseDeepDISM = $true
+	$script:DISMMode = "ScanHealth"
 	$script:ForceAutoReboot = $true
 
-	Write-Log "Deep Scan selected. This will run DISM followed by SFC and then CHKDSK upon an automatic reboot once the first two scans are complete."
+	Write-Log "Deep Scan selected. This will run DISM ScanHealth followed by SFC and then CHKDSK upon an automatic reboot once the first two scans are complete."
 	return $true
 
 }
@@ -271,46 +274,97 @@ Write-Log "Task selection: SFC: $InvokeSFC, DISM: $InvokeDISM, CHKDSK: $InvokeCH
 #region ---REPAIR FUNCTIONS---
 
 function Invoke-DISM {
-	Write-Log "Starting Deployment Image Servicing and Management (DISM) scan. This will check the health of the Windows image and attempt repairs if necessary."
-	Write-Log "Grab a coffee, this might take a bit."
-	
-	if ($script:UseDeepDISM) {
-		Write-Log "Deep DISM mode enabled. DISM will run ScanHealth before RestoreHealth."
-		Write-Log "This will allow DISM to check for component store corruption. This will take a while."
-		
-		DISM /Online /Cleanup-Image /ScanHealth | Tee-Object -FilePath $logFile -Append
-		
-		$scanExitCode = $LASTEXITCODE
-		Write-Log "DISM ScanHealth completed with exit code: $scanExitCode."
+	Write-Log "Starting Deployment Image Servicing and Management (DISM) scan. "
+	Write-Log "This will check the health of the Windows image and attempt repairs if necessary."
 
-		switch ($scanExitCode) {
-			0 { Write-Log "DISM ScanHealth completed successfully." }
-			1 { Write-Log "DISM ScanHealth found issues with your Windows image. Review the log output for more details." }
-			2 { Write-Log "DISM ScanHealth found issues with your Windows image and further corrective action may be required. Review the log for more details." }
-	 		3 { Write-Log "DISM ScanHealth could not perform the requested operation. The scan may have failed or it was interrupted." }
-			default { Write-Log "DISM ScanHealth encountered an unexpected error with exit code: $scanExitCode. Please check the logs for more details." }
-	}
+	function Write-LocalDISMExitCode {
+		param(
+			[string]$OperationName,
+			[int]$ExitCode
+		)
+
+		Write-Log "$OperationName completed with exit code: $ExitCode."
+
+		switch ($ExitCode) {
+			0 { Write-Log "$OperationName completed successfully." }
+			1 { Write-Log "$OperationName found issues with the Windows image. Review the log output for more details." }
+			2 { Write-Log "$OperationName found issues with the Windows image and further corrective action may be required. Review the log for more details." }
+			3 { Write-Log "$OperationName could not perform the requested operation. The scan may have failed or it was interrupted." }
+			default { Write-Log "$OperationName encountered an unexpected error with exit code: $ExitCode. Please check the logs for more details." }
+		}
 
 		Write-Log ""
 	}
+	
+	switch ($script:DISMMode) {
 
-		Write-Log "Running DISM RestoreHealth. This will check the health of your Windows image and attempt repairs if necessary."
-		Write-Log "This will take quite a while. You may want to go grab a coffee."
+		"ScanHealth" {
+			Write-Log "Running DISM Scan Health. This performs a deep corruption scan of the Windows component store. This tool does not perform repairs. If issues are found, you will be prompted to run Restore Health to repair damaged components."
 
-		DISM /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
-		
-		$exitCode = $LASTEXITCODE
-		Write-Log "DISM RestoreHealth completed with exit code: $exitCode."
+			DISM.exe /Online /Cleanup-Image /ScanHealth | Tee-Object -FilePath $logFile -Append
 
-		switch ($exitCode) {
-			0 { Write-Log "DISM RestoreHealth completed successfully. Your Windows image appears to be pretty healthy! Good job!" }
-			1 { Write-Log "DISM RestoreHealth found issues with the Windows image. Review the log output for more details." }
-			2 { Write-Log "DISM RestoreHealth found issues with the Windows image but was unable to fix some of them. Review the log for more details."}
-	 		3 { Write-Log "DISM RestoreHealth could not perform the requested operation. The scan may have failed or it was interrupted." }
-			default { Write-Log "DISM RestoreHealth encountered an unexpected error with exit code: $exitCode. Please check the logs for more details." }
+			$exitCode = $LASTEXITCODE
+			Write-LocalDISMExitCode -OperationName "DISM ScanHealth" -ExitCode $exitCode
+
+			if ($exitCode -ne 0) {
+				Write-Log "Component store corruption may have been detected."
+				$repairChoice = Read-Host "DISM found some issues. Run Restore Health to attempt repairs? (Y/N)"
+
+				if ($repairChoice.ToUpper() -in @("Y", "YES")) {
+					Write-Log "Selection confirmed, preparing to run DISM Restore Health. Proceeding with repairs."
+
+					DISM.exe /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
+
+					$restoreExitCode = $LASTEXITCODE
+					Write-LocalDISMExitCode -OperationName "DISM RestoreHealth" -ExitCode $restoreExitCode
+				}
+				else {
+					Write-Log "User declined to run DISM Restore Health. Skipping repairs."
+					Write-Log "Returning you to the main menu. Running DISM Restore Health is highly recommended prior to running other diagnostics. Please review the logs for more details."
+					return $false							
+				}
+			}
+		}
+		"RestoreHealth" {
+			Write-Log "Running DISM Restore Health. This scand the Windows component store for corruption and attempts repairs."
+			Write-Log "This process can take a while, especaially if corruption is found and a repair is neccessary."
+
+			DISM.exe /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
+
+			$exitCode = $LASTEXITCODE
+			Write-LocalDISMExitCode -OperationName "DISM RestoreHealth" -ExitCode $exitCode
+		}
+
+		default {
+			Write-Log "DISM mode was not specified. Defaulting to Scan Health."
+
+			DISM.exe /Online /Cleanup-Image /ScanHealth | Tee-Object -FilePath $logFile -Append
+
+			$exitCode = $LASTEXITCODE
+			Write-LocalDISMExitCode -OperationName "DISM ScanHealth" -ExitCode $exitCode
+
+			if ($exitCode -ne 0) {
+				Write-Log "Component store corruption may have been detected."
+				$repairChoice = Read-Host "DISM found some issues. Run Restore Health to attempt repairs? (Y/N)"
+
+				if ($repairChoice.ToUpper() -in @("Y", "YES")) {
+					Write-Log "Selection confirmed, preparing to run DISM Restore Health. Proceeding with repairs."
+
+					DISM.exe /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
+
+					$restoreExitCode = $LASTEXITCODE
+					Write-LocalDISMExitCode -OperationName "DISM RestoreHealth" -ExitCode $restoreExitCode
+				}
+				else {
+					Write-Log "User declined to run DISM Restore Health. Skipping repairs."
+					Write-Log "Returning you to the main menu. Running DISM Restore Health is highly recommended prior to running other diagnostics. Please review the logs for more details."
+					return $false							
+				}
+			}
+		}
 	}
 
-	Write-Log ""
+	return $true
 }
 
 function Invoke-SFC {
@@ -399,10 +453,18 @@ function Exit-WinRepair {
 
 if ($InvokeDISM) {
 	Write-Log "DISM switch is engaged. Launching DISM scan..."
-	Invoke-DISM
-}
-else {
-	Write-Log "DISM switch is not engaged. Skipping DISM scan. Your Windows image will just be here not being scanned, should be okay, right?"
+
+	if (Invoke-DISM) {
+		Write-Log "DISM switch engaged. Launching DISM operation..."
+
+		if (-not (Invoke-DISM)) {
+			Write-Log "DISM stage reported that the workflow should stop. Main execution is halding now."
+			return
+		}
+	}
+	else {
+		Write-Log "DISM switch is not engaged. Skipping DISM operation."
+	}
 }
 
 if ($InvokeSFC) {
