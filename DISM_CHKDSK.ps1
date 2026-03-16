@@ -240,7 +240,8 @@ function Set-DeepScanProfile{
 	$script:DISMMode = "ScanHealth"
 	$script:ForceAutoReboot = $true
 
-	Write-Log "Deep Scan selected. This will run DISM ScanHealth followed by SFC and then CHKDSK upon an automatic reboot once the first two scans are complete."
+	Write-Log "Deep Scan selected. This will reboot your system and upon reboot it will run CHKDSK. Once CHKDSK is complete, system will load Windows and continue with diagnoscis, running DISM RestoreHealth followed by SFC. You will be prompted to perform a full shutdown at the end to complete the final phase of repairs."
+	Write-Log "This is the most comprehensive scan profile, but it will take the longest to complete. It's recommended to run this scan when you have a good amount of time set aside and do not need to use your computer for a while."
 	return $true
 
 }
@@ -448,8 +449,8 @@ function Resume-DeepScanWorkflow {
 	$script:RebootAfter = $false
 	$script:ForceAutoReboot = $false
 
-	if ($invokeDISM) {
-		Write-Log "Deep Scan resume: Launcing DISM RestoreHealth scan..."
+	if ($InvokeDISM) {
+		Write-Log "Deep Scan resume: Launching DISM RestoreHealth scan..."
 
 		if (-not (Invoke-DISM)) {
 			Write-Log "DISM stage failed or halted "
@@ -465,7 +466,7 @@ function Resume-DeepScanWorkflow {
 
 		switch ($powerCycleChoice.ToUpper()) {
 			{$_ -in @("Y", "YES")} {
-				Write-Log "WinRepair has completed the full scan and the user approved shudown for full power cycle. Shutting down now."
+				Write-Log "WinRepair has completed the full scan and the user approved shutdown for full power cycle. Shutting down now."
 				Write-Log "Once the full shutdown has been completed, please wait 30 to 60 seconds before powering your machine back on."
 				Stop-Computer -Force
 			}
@@ -491,6 +492,11 @@ function Exit-WinRepair {
 #endregion
 
 #region --- MAIN EXECUTION ---
+
+if ($ResumeDeepScan) {
+	Resume-DeepScanWorkflow
+	exit
+}
 
 if ($InvokeDISM) {
 	Write-Log "DISM switch is engaged. Launching DISM scan..."
@@ -531,11 +537,6 @@ if ($RebootAfter) {
 }
 else {
 	Write-Log "RebootAfter switch is not engaged. The script will end without prompting for a reboot."
-}
-
-if ($ResumeDeepScan) {
-	Resume-DeepScanWorkflow
-	exit
 }
 
 Write-Log "=== WinRepair Script Completed all selected tasks. $(Get-Date) ==="
