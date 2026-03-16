@@ -55,7 +55,8 @@ param(
 
 	# Options.
 	[switch]$RebootAfter,
-	[switch]$UseCHKDSK_R
+	[switch]$UseCHKDSK_R,
+	[switch]$ResumeDeepScan
 )
 
 if ($SFC) { $InvokeSFC = $true }
@@ -434,6 +435,47 @@ function Invoke-AutoReboot {
 	Write-Log "Please save all your work and close any open applications immediately to avoid data loss."
 
 	shutdown.exe /r /t 30 /c "WinRepair has completed DISM and SFC scans and is rebooting to complete final scan."
+}
+
+function Resume-DeemScanWorkflow {
+	Write-Log "Resuming Deep Scan workflow after reboot."
+	Write-Log "CHKDSK should have completed upon reboot. Continuing with DISM RestoreHealth and SFC once system is back online."
+
+	$script:DISMMode = "RestoreHealth"
+	$script:InvokeDISM = "$true"
+	$script:InvokeSFC = "$true"
+	$script:InvokeCHKDSK = "$false"
+	$script:RebootAfter = "$false"
+	$script:ForceAutoReboot = "$false"
+
+	if ($invokeDISM) {
+		Write-Log "Deep Scan resume: Launcing DISM RestoreHealth scan..."
+
+		if (-not (Invoke-DISM)) {
+			Write-Log "DISM stage failed or halted "
+			Invoke-SFC
+		}
+
+		Write-Log "Deep Scan post-reboot repair phase is complete."
+		Write-Log "A full shutdown is recommended. Wait 30-60 seconds after system shutdown before powering your machine back on "
+		
+		$powerCycleChoice = Read-Host "Shut down now so a full power cycle cam be performed? (Y/N)"
+
+		switch ($powerCycleChoice. ToUpper()) {
+			{$_ -in @("Y", "YES")} {
+				Write-Log "WinRepair has completed the full scan and the user approved shudown for full power cycle. Shutting down now."
+				Write-Log "Once the full shutdown has been completed, please wait 30 to 60 seconds before powering your machine back on."
+				Stop-Computer -Force
+			}
+			default {
+				Write-Log "Power cycle declined. You can shut down your computer manually when you are ready. Remember, a full shutdown is recommended to complete the Deep Scan workflow and ensure all repairs are fully applied."
+			}
+		}
+	}
+	default {
+
+	}
+	
 }
 
 #endregion
