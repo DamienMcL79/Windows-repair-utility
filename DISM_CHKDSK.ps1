@@ -65,7 +65,7 @@ if ($CHKDSK) { $InvokeCHKDSK = $true }
 
 #endregion
 
-# region--- ADMIN ELEVATION ---
+#region --- ADMIN ELEVATION ---
 
 function Test-IsAdministrator {
 	$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -86,6 +86,7 @@ function Start-ElevatedSelf {
 		if ($InvokeCHKDSK) { $arguments += "-InvokeCHKDSK" }
 		if ($RebootAfter) { $arguments += "-RebootAfter" }
 		if ($UseCHKDSK_R) { $arguments += "-UseCHKDSK_R" }
+		if ($ResumeDeepScan) { $arguments += "-ResumeDeepScan" }
 	
 	Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs
 	exit
@@ -232,18 +233,23 @@ function Set-DeepScanProfile{
 		return $false
 	}
 
-	$script:InvokeDISM = $true
-	$script:InvokeSFC = $true
+	$script:InvokeDISM = $false
+	$script:InvokeSFC = $false
 	$script:InvokeCHKDSK = $true
 	$script:UseCHKDSK_R = $true
 	$script:RebootAfter = $true
-	$script:DISMMode = "ScanHealth"
+	$script:DISMMode = "RestoreHealth"
 	$script:ForceAutoReboot = $true
 
-	Write-Log "Deep Scan selected. This will reboot your system and upon reboot it will run CHKDSK. Once CHKDSK is complete, system will load Windows and continue with diagnoscis, running DISM RestoreHealth followed by SFC. You will be prompted to perform a full shutdown at the end to complete the final phase of repairs."
+	Write-Log "Deep Scan selected. This will reboot your system and upon reboot it will run CHKDSK. Once CHKDSK is complete, system will load Windows and continue with diagnostics, running DISM RestoreHealth followed by SFC. You will be prompted to perform a full shutdown at the end to complete the final phase of repairs."
 	Write-Log "This is the most comprehensive scan profile, but it will take the longest to complete. It's recommended to run this scan when you have a good amount of time set aside and do not need to use your computer for a while."
-	return $true
 
+	if (-not (Register-DeepScanResumeTask)) {
+		Write-Log "Deep Scan aborted. Scheduled task could not be created."
+		return $false
+	}
+
+	return $true
 }
 
 #endregion
@@ -274,7 +280,7 @@ Write-Log "Task selection: SFC: $InvokeSFC, DISM: $InvokeDISM, CHKDSK: $InvokeCH
 #endregion
 
 
-#region ---REPAIR FUNCTIONS---
+#region --- REPAIR FUNCTIONS---
 
 function Invoke-DISM {
 	Write-Log "Starting Deployment Image Servicing and Management (DISM) scan. "
@@ -393,7 +399,7 @@ function Invoke-CHKDSK {
 	$systemDrive = $env:SystemDrive
 	Write-Log "Preparing to schedule CHKDSK on system drive ($systemDrive)."
 
-	if ($UseCHKDSK_R) {
+	if ($script:UseCHKDSK_R) {
 		$chkdskArgs = "$systemDrive /f /r"
 		Write-Log "CHKDSK will be scheduled with /f and /r. This is a deep scan so it will be thorough but will take an incredibly long time to complete. I'd recommend leaving the computer and coming back later."
 	}
@@ -437,10 +443,68 @@ function Invoke-AutoReboot {
 
 	shutdown.exe /r /t 30 /c "WinRepair has completed DISM and SFC scans and is rebooting to complete final scan."
 }
+function Register-DeepScanResumeTask {
+    Write-Log "Registering scheduled task for Deep Scan post-reboot continuation."
 
+    $taskName  = "WinRepair_DeepScanResume"
+    $scriptPath = $PSCommandPath
+
+    $action = New-ScheduledTaskAction `
+        -Execute "powershell.exe" `
+        -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -ResumeDeepScan"
+
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+
+    $settings = New-ScheduledTaskSettingsSet `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries `
+        -RunOnlyIfNetworkAvailable:$false
+
+    $principal = New-ScheduledTaskPrincipal `
+        -UserId "SYSTEM" `
+        -LogonType ServiceAccount `
+        -RunLevel Highest
+
+    try {
+        Register-ScheduledTask `
+            -TaskName $taskName `
+            -Action $action `
+            -Trigger $trigger `
+            -Settings $settings `
+            -Principal $principal `
+            -Force | Out-Null
+
+        Write-Log "Scheduled task '$taskName' registered successfully. It will run once on next login and resume the Deep Scan workflow."
+        return $true
+    }
+    catch {
+        Write-Log "Failed to register scheduled task. Error: $_"
+        Write-Log "Deep Scan cannot continue without the scheduled task. Aborting."
+        return $false
+    }
+}
+
+function Remove-DeepScanResumeTask {
+	$taskName = "WinRepair_DeepScanResume"
+
+	try {
+		if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+			Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+			Write-Log "Scheduled task '$taskName' removed successfully."
+		}
+		else {
+			Write-Log "Scheduled task '$taskName' not found. No need to remove."
+    	}
+	}
+	catch {
+		Write-Log "Failed to remove scheduled task. Error: $_"
+		Write-Log "Please check Task Scheduler on your system and remove any task named '$taskName' to prevent it from running again on next login."
+	}
+}
 function Resume-DeepScanWorkflow {
+	Remove-DeepScanResumeTask
 	Write-Log "Resuming Deep Scan workflow after reboot."
-	Write-Log "CHKDSK should have completed upon reboot. Continuing with DISM RestoreHealth and SFC once system is back online."
+	Write-Log "CHKDSK should complete upon reboot. Continuing with DISM RestoreHealth and SFC scans..."
 
 	$script:DISMMode = "RestoreHealth"
 	$script:InvokeDISM = $true
@@ -449,32 +513,29 @@ function Resume-DeepScanWorkflow {
 	$script:RebootAfter = $false
 	$script:ForceAutoReboot = $false
 
-	if ($InvokeDISM) {
-		Write-Log "Deep Scan resume: Launching DISM RestoreHealth scan..."
+	Write-Log "Deep Scan resume: Launching DISM RestoreHealth scan..."
 
-		if (-not (Invoke-DISM)) {
-			Write-Log "DISM stage failed or halted "
-			return	
-		}
-
-		Invoke-SFC
-
-		Write-Log "Deep Scan post-reboot repair phase is complete."
-		Write-Log "A full shutdown is recommended. Wait 30-60 seconds after system shutdown before powering your machine back on "
-		
-		$powerCycleChoice = Read-Host "Shut down now so a full power cycle cam be performed? (Y/N)"
-
-		switch ($powerCycleChoice.ToUpper()) {
-			{$_ -in @("Y", "YES")} {
-				Write-Log "WinRepair has completed the full scan and the user approved shutdown for full power cycle. Shutting down now."
-				Write-Log "Once the full shutdown has been completed, please wait 30 to 60 seconds before powering your machine back on."
-				Stop-Computer -Force
-			}
-			default {
-				Write-Log "Power cycle declined. You can shut down your computer manually when you are ready. Remember, a full shutdown is recommended to complete the Deep Scan workflow and ensure all repairs are fully applied."
-			}
-		}
+	if (-not (Invoke-DISM)) {
+		Write-Log "DISM stage failed or halted. Main execution is stopping now."
+		return
 	}
+
+	Invoke-SFC
+
+	Write-Log "Deep Scan post-reboot repair phase is complete."
+	Write-Log "A full shutdown is recommended. Once shutdown is complete, wait 30 to 60 seconds before powering on the system again."
+
+	$powerCycleChoice = Read-Host "Shut down now so a full power cycle can be completed? (Y/N)"
+
+	switch ($powerCycleChoice.ToUpper()) {
+		{$_ -in @("Y", "YES")} {
+			Write-Log "Shutting down now. Remember to wait 30 to 60 seconds after the system powers off before turning it back on to ensure a full power cycle."
+			Stop-Computer -Force
+		}
+		default {
+			Write-Log "Power cycle declined. Please remember to perform a full shutdown and power cycle as soon as possible to complete the repair process and ensure system stability."
+		}
+  	}
 }
 
 #endregion
@@ -495,20 +556,22 @@ function Exit-WinRepair {
 
 if ($ResumeDeepScan) {
 	Resume-DeepScanWorkflow
-	exit
+	Write-Log "Resuming Deep Scan workflow is complete. Ending script execution."
+	return
 }
 
 if ($InvokeDISM) {
 	Write-Log "DISM switch is engaged. Launching DISM scan..."
 
 	if (-not (Invoke-DISM)) {
-		Write-Log "DISM stage reported that the workflow should stop. Main execution is halting now."
-		return
+			Write-Log "DISM stage reported that the workflow should stop. Main execution is halting now."
+			return
 	}
 }
 else {
-		Write-Log "DISM switch is not engaged. Skipping DISM operation."
+	Write-Log "DISM switch is not engaged. Skipping DISM operation."
 }
+
 
 if ($InvokeSFC) {
 	Write-Log "SFC switch is engaged. Launching SFC scan..."
