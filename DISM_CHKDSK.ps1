@@ -885,7 +885,6 @@ else {
 	Write-Log "DISM switch is not engaged. Skipping DISM operation."
 }
 
-
 if ($InvokeSFC) {
 	Write-Log "SFC switch is engaged. Launching SFC scan..."
 	Invoke-SFC
