@@ -149,6 +149,7 @@ $logFile = Join-Path $logRoot "WinRepair_$timestamp.log"
 $script:DISMMode = $null
 $script:ForceAutoReboot = $false
 $script:CHKDSKMode = $null
+
 #endregion
 
 
@@ -264,6 +265,8 @@ function Set-DeepScanProfile{
 
 #region --- MENU SUPPORT FUNCTIONS ---
 
+Write-Log "Welcome to WinRepair!"
+Write-Log "Logs will be saved to: $logFile"
 function Show-MainMenu {
 		do {
 			Clear-Host
@@ -328,15 +331,15 @@ function Show-MainMenu {
 					}
 			}
 		} while ($true)
-	}
+}
 
-	function Invoke-MenuPause {
+function Invoke-MenuPause {
 		Write-Host ""
 		Write-Host "  Press any key to return to the main menu..." -ForegroundColor DarkGray
 		$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-	}
+}
 
-	function Show-DISMMenu {
+function Show-DISMMenu {
 		do {
 			Clear-Host
 			Write-Host ""
@@ -396,7 +399,7 @@ function Show-MainMenu {
 				}
 			}
 		} while ($true)
-	}
+}
 
 function Show-CHKDSKMenu {
 	do {
@@ -484,28 +487,65 @@ function Show-CHKDSKMenu {
 		}
 	} while ($true)
 }
+function Show-Help {
+	Clear-Host
+    Write-Host ""
+    Write-Host "  =============================================" -ForegroundColor DarkGray
+    Write-Host "        WINREPAIR UTILITY - HELP               " -ForegroundColor White
+    Write-Host "  =============================================" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  --- INDIVIDUAL TOOLS ---" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  DISM (Deployment Image Servicing and Management)"
+    Write-Host "  Scans and repairs the Windows component store. Four modes are available:"
+    Write-Host "    CheckHealth   - Quick flag check only. No deep scan, no repairs."
+    Write-Host "    ScanHealth    - Deep corruption scan. No repairs performed."
+    Write-Host "    RestoreHealth - Scans and attempts to repair any corruption found."
+    Write-Host "    ScanHealth with RestoreHealth fallback - Scans first, prompts"
+    Write-Host "                    to repair if issues are found."
+    Write-Host ""
+    Write-Host "  SFC (System File Checker)"
+    Write-Host "  Scans all protected Windows system files and attempts to repair"
+    Write-Host "  any that are found to be corrupted or missing. Only one scan"
+    Write-Host "  mode is available: scannow."
+    Write-Host ""
+    Write-Host "  CHKDSK (Check Disk)"
+    Write-Host "  Scans the file system and disk surface for errors. Five modes:"
+    Write-Host "    /f            - Fix file system errors. Schedules on reboot."
+    Write-Host "    /f /r         - Fix errors and scan for bad sectors. Reboot."
+    Write-Host "    /f /r /x      - Fix errors, bad sectors, forced dismount. Reboot."
+    Write-Host "    /scan         - Online scan. No reboot required."
+    Write-Host "    /f /b         - Fix errors and re-evaluate all bad clusters. Reboot."
+    Write-Host ""
+    Write-Host "  =============================================" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  --- QUICK SELECT PROFILES ---" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  Quick Scan"
+    Write-Host "  Runs DISM ScanHealth followed by SFC. No reboot required."
+    Write-Host "  Best for routine maintenance or a first pass on a suspect system."
+    Write-Host ""
+    Write-Host "  Enhanced Scan"
+    Write-Host "  Runs DISM ScanHealth, then SFC, then schedules CHKDSK /f."
+    Write-Host "  System reboots automatically after SFC to run CHKDSK."
+    Write-Host "  Best for systems showing signs of instability or file system errors."
+    Write-Host ""
+    Write-Host "  Deep Scan"
+    Write-Host "  Immediately reboots to run CHKDSK /f /r on the system drive."
+    Write-Host "  After reboot, runs DISM RestoreHealth followed by SFC."
+    Write-Host "  Ends with a full shutdown prompt for a complete power cycle."
+    Write-Host "  Best for systems with suspected disk damage or severe corruption."
+    Write-Host ""
+    Write-Host "  =============================================" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Press X to return to the main menu..." -ForegroundColor DarkGray
+    Write-Host ""
 
-#endregion
-
-#region --- STARTUP LOGGING & TASK SELECTION ---
-
-Write-Log "Oh great, now you are making me write logs? Like I didn't have anything better to do? I guess, whatever..."
-Write-Log "Logs will be saved to: $logFile"
-
-if (-not ($InvokeSFC -or $InvokeDISM -or $InvokeCHKDSK)) {
-	Write-Log "No repair task switches provided. Yay, chaos will reign! Run ALL the things! (SFC, DISM, CHKDSK)"
-	$InvokeSFC = $true
-	$InvokeDISM = $true
-	$InvokeCHKDSK = $true
+    do {
+        $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    } while ($key.Character -ne 'x' -and $key.Character -ne 'X')
 }
-else {
-	Write-Log "Repair task switches detected, we will run only the specified tasks. Your choice, your consequences!"
-}
-
-Write-Log "Task selection: SFC: $InvokeSFC, DISM: $InvokeDISM, CHKDSK: $InvokeCHKDSK"
-
 #endregion
-
 
 #region --- REPAIR FUNCTIONS---
 
