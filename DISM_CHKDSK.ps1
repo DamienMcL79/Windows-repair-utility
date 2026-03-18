@@ -398,6 +398,93 @@ function Show-MainMenu {
 		} while ($true)
 	}
 
+function Show-CHKDSKMenu {
+	do {
+		Clear-Host
+        Write-Host ""
+        Write-Host "  =============================================" -ForegroundColor DarkGray
+        Write-Host "        CHKDSK - CHECK DISK                    " -ForegroundColor White
+        Write-Host "  =============================================" -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  Select a CHKDSK operation to run:" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "  1.  /f          - Fix file system errors (schedules on reboot)"
+        Write-Host "  2.  /f /r       - Fix errors + bad sector scan (schedules on reboot)"
+        Write-Host "  3.  /f /r /x    - Fix errors + bad sectors + forced dismount (reboot)"
+        Write-Host "  4.  /scan       - Online scan, no reboot required"
+        Write-Host "  5.  /f /b       - Fix errors + full bad cluster re-evaluation (reboot)"
+        Write-Host ""
+        Write-Host "  ---" -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  6.  Return to Main Menu"
+        Write-Host ""
+        Write-Host "  =============================================" -ForegroundColor DarkGray
+        Write-Host ""
+
+        $choice = Read-Host "  Enter selection [1-6]"
+
+		switch ($choice.Trim()) {
+			"1" {
+				$script:CHKDSKMode = "F"
+				Write-Log "User selected CHKDSK /f from menu."
+				if (Confirm-CHKDSKReboot) {
+					$script:InvokeCHKDSK = $true
+					Invoke-CHKDSK
+					Invoke-MenuPause
+				}
+
+			}
+			"2" {
+				$script:CHKDSKMode = "FR"
+				Write-Log "User selected CHKDSK /f /r from menu."
+				if (Confirm-CHKDSKReboot) {
+					$script:InvokeCHKDSK = $true
+					Invoke-CHKDSK
+					Invoke-MenuPause
+				}
+
+			}
+			"3" {
+				$script:CHKDSKMode = "FRX"
+				Write-Log "User selected CHKDSK /f /r /x from menu."
+				if (Confirm-CHKDSKReboot) {
+					$script:InvokeCHKDSK = $true
+					Invoke-CHKDSK
+					Invoke-MenuPause
+				}
+
+			}
+			"4" {
+				$script:CHKDSKMode = "Scan"
+				Write-Log "User selected CHKDSK /scan from menu."
+				$script:InvokeCHKDSK = $true
+				Invoke-CHKDSK
+				Invoke-MenuPause
+				
+
+			}
+			"5" {
+				$script:CHKDSKMode = "FB"
+				Write-Log "User selected CHKDSK /f /b from menu."
+				if (Confirm-CHKDSKReboot) {
+					$script:InvokeCHKDSK = $true
+					Invoke-CHKDSK
+					Invoke-MenuPause
+				}
+
+			}
+			"6" {
+				return
+			}
+			default {
+				Write-Host ""
+				Write-Host " Invalid selection. Please select an option between 1 and 6." -ForegroundColor Yellow
+				Start-Sleep -Seconds 2
+			}
+		}
+	} while ($true)
+}
+
 #endregion
 
 #region --- STARTUP LOGGING & TASK SELECTION ---
