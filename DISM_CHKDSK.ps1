@@ -352,17 +352,15 @@ function Show-DISMMenu {
         	Write-Host "  1.  CheckHealth    - Quick corruption flag check (no repairs)"
         	Write-Host "  2.  ScanHealth     - Deep corruption scan (no repairs)"
         	Write-Host "  3.  RestoreHealth  - Scan and repair component store"
-        	Write-Host "  4.  ScanHealth with RestoreHealth fallback"
-        	Write-Host "             (Scans first, prompts to repair if issues found)"
         	Write-Host ""
         	Write-Host "  ---" -ForegroundColor DarkGray
         	Write-Host ""
-        	Write-Host "  5.  Return to Main Menu"
+        	Write-Host "  4.  Return to the Main Menu." 
         	Write-Host ""
         	Write-Host "  =============================================" -ForegroundColor DarkGray
-        	Write-Host ""
+        	Write-Host "" 
 
-        	$choice = Read-Host "  Enter selection [1-5]"
+        	$choice = Read-Host "  Enter selection [1-4]"
 
 			switch ($choice.Trim()) {
 				"1" {
