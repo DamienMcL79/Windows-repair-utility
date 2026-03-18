@@ -22,17 +22,20 @@
 .PARAMETER RebootAfter
     Prompt the user to reboot after all tasks complete.
 
-.PARAMETER UseCHKDSK_R
-    Run CHKDSK with the /r flag for a deep bad sector scan.
-
 .PARAMETER SFC
 	Alias for InvokeSFC.
 
 .PARAMETER DISM
 	Alias for InvokeDISM.
 
+.PARAMETER DISMMode
+	 Sets the DISM scan mode. Accepted values: CheckHealth, ScanHealth, RestoreHealth.
+
 .PARAMETER CHKDSK
 	Alias for InvokeCHKDSK.
+
+.PARAMETER CHKDSKMode
+	Sets the CHKDSK scan mode. Accepted values: F, FR, FRX, Scan, FB.
 
 #>
 
@@ -55,13 +58,16 @@ param(
 
 	# Options.
 	[switch]$RebootAfter,
-	[switch]$UseCHKDSK_R,
+	[string]$CHKDSKMode,
+	[string]$DISMMode,
 	[switch]$ResumeDeepScan
 )
 
 if ($SFC) { $InvokeSFC = $true }
 if ($DISM) { $InvokeDISM = $true }
 if ($CHKDSK) { $InvokeCHKDSK = $true }
+if ($CHKDSKMode) { $script:CHKDSKMode = $CHKDSKMode }
+if ($DISMMode) { $script:DISMMode = $DISMMode }
 
 #endregion
 
@@ -85,7 +91,8 @@ function Start-ElevatedSelf {
 		if ($InvokeDISM) { $arguments += "-InvokeDISM" }
 		if ($InvokeCHKDSK) { $arguments += "-InvokeCHKDSK" }
 		if ($RebootAfter) { $arguments += "-RebootAfter" }
-		if ($UseCHKDSK_R) { $arguments += "-UseCHKDSK_R" }
+		if ($CHKDSKMode) { $arguments += "-CHKDSKMode `"$CHKDSKMode`"" }
+		if ($DISMMode) { $arguments += "-DISMMode `"$DISMMode`"" }
 		if ($ResumeDeepScan) { $arguments += "-ResumeDeepScan" }
 	
 	Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs
@@ -141,6 +148,7 @@ $logFile = Join-Path $logRoot "WinRepair_$timestamp.log"
 
 $script:DISMMode = $null
 $script:ForceAutoReboot = $false
+$script:CHKDSKMode = $null
 #endregion
 
 
@@ -200,7 +208,7 @@ function Set-QuickScanProfile{
 	$script:InvokeDISM = $true
 	$script:InvokeSFC = $true
 	$script:InvokeCHKDSK = $false
-	$script:UseCHKDSK_R = $false
+	$script:CHKDSKMode = $null
 	$script:RebootAfter = $false
 	$script:DISMMode = "ScanHealth"
 
@@ -217,7 +225,7 @@ function Set-EnhancedScanProfile{
 	$script:InvokeSFC = $true
 	$script:InvokeCHKDSK = $true
 
-	$script:UseCHKDSK_R = $false
+	$script:CHKDSKMode = "F"
 	$script:RebootAfter = $true
 	$script:ForceAutoReboot = $true
 	
@@ -236,7 +244,7 @@ function Set-DeepScanProfile{
 	$script:InvokeDISM = $false
 	$script:InvokeSFC = $false
 	$script:InvokeCHKDSK = $true
-	$script:UseCHKDSK_R = $true
+	$script:CHKDSKMode = "FR"
 	$script:RebootAfter = $true
 	$script:DISMMode = "RestoreHealth"
 	$script:ForceAutoReboot = $true
@@ -256,7 +264,139 @@ function Set-DeepScanProfile{
 
 #region --- MENU SUPPORT FUNCTIONS ---
 
+function Show-MainMenu {
+		do {
+			Clear-Host
+        	Write-Host ""
+        	Write-Host "  =============================================" -ForegroundColor DarkGray
+        	Write-Host "        WINREPAIR UTILITY - MAIN MENU          " -ForegroundColor White
+        	Write-Host "  =============================================" -ForegroundColor DarkGray
+        	Write-Host ""
+        	Write-Host "  --- Individual Tools ---" -ForegroundColor Gray
+        	Write-Host ""
+        	Write-Host "  1.  DISM - Deployment Image Servicing and Management"
+        	Write-Host "  2.  SFC  - System File Checker"
+        	Write-Host "  3.  CHKDSK - Check Disk"
+        	Write-Host ""
+        	Write-Host "  --- Quick Select Profiles ---" -ForegroundColor Gray
+        	Write-Host ""
+        	Write-Host "  4.  Quick Scan    (DISM ScanHealth + SFC)"
+        	Write-Host "  5.  Enhanced Scan (DISM ScanHealth + SFC + CHKDSK, auto reboot)"
+        	Write-Host "  6.  Deep Scan     (CHKDSK first, then DISM RestoreHealth + SFC)"
+        	Write-Host ""
+        	Write-Host "  ---" -ForegroundColor DarkGray
+        	Write-Host ""
+        	Write-Host "  7.  Help"
+        	Write-Host "  8.  Exit"
+        	Write-Host ""
+        	Write-Host "  =============================================" -ForegroundColor DarkGray
+        	Write-Host ""
+			
+			$choice = Read-Host "   Enter selection [1-8]"
 
+			switch ($choice.Trim()) {
+				"1" { Show-DISMMenu }
+				"2" {
+						$script:DISMMode = $null
+						Invoke-SFC
+						Invoke-MenuPause
+				}
+				"3" { Show-CHKDSKMenu }
+				"4" {
+						Set-QuickScanProfile
+						Invoke-DISM
+						Invoke-SFC
+						Invoke-MenuPause
+					}
+				"5" {
+						if (Set-EnhancedScanProfile) {
+							Invoke-DISM
+							Invoke-SFC
+							Invoke-CHKDSK
+							Invoke-AutoReboot
+						}
+					}
+				"6" {
+						Set-DeepScanProfile
+					}
+				"7" { Show-Help }
+				"8" { Exit-WinRepair }
+				default {
+						Write-Host ""
+						Write-Host " Invalid selection. Please select an option between 1 and 8" -ForegroundColor Yellow
+						Start-Sleep -Seconds 2
+					}
+			}
+		} while ($true)
+	}
+
+	function Invoke-MenuPause {
+		Write-Host ""
+		Write-Host "  Press any key to return to the main menu..." -ForegroundColor DarkGray
+		$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+	}
+
+	function Show-DISMMenu {
+		do {
+			Clear-Host
+			Write-Host ""
+       		Write-Host "  =============================================" -ForegroundColor DarkGray
+        	Write-Host "        DISM - IMAGE SERVICING & MANAGEMENT    " -ForegroundColor White
+        	Write-Host "  =============================================" -ForegroundColor DarkGray
+        	Write-Host ""
+        	Write-Host "  Select a DISM operation to run:" -ForegroundColor Gray
+        	Write-Host ""
+        	Write-Host "  1.  CheckHealth    - Quick corruption flag check (no repairs)"
+        	Write-Host "  2.  ScanHealth     - Deep corruption scan (no repairs)"
+        	Write-Host "  3.  RestoreHealth  - Scan and repair component store"
+        	Write-Host "  4.  ScanHealth with RestoreHealth fallback"
+        	Write-Host "             (Scans first, prompts to repair if issues found)"
+        	Write-Host ""
+        	Write-Host "  ---" -ForegroundColor DarkGray
+        	Write-Host ""
+        	Write-Host "  5.  Return to Main Menu"
+        	Write-Host ""
+        	Write-Host "  =============================================" -ForegroundColor DarkGray
+        	Write-Host ""
+
+        	$choice = Read-Host "  Enter selection [1-5]"
+
+			switch ($choice.Trim()) {
+				"1" {
+					$script:DISMMode = "CheckHealth"
+                	Write-Log "User selected DISM CheckHealth from menu."
+                	if (-not (Invoke-DISM)) {
+                    Write-Log "DISM CheckHealth encountered an issue."
+                	}
+                	Invoke-MenuPause
+				}
+				"2" {
+					$script:DISMMode = "ScanHealth"
+                	Write-Log "User selected DISM ScanHealth from menu."
+                	if (-not (Invoke-DISM)) {
+                    	Write-Log "DISM ScanHealth encountered an issue."
+                	}
+                	Invoke-MenuPause
+				}
+				"3" {
+					$script:DISMMode = "RestoreHealth"
+					Write-Log "User selected DISM RestoreHealth from menu."
+					if (-not (Invoke-DISM)) {
+						Write-Log "DISM RestoreHealth encountered an issue."
+					}
+					Invoke-MenuPause
+				}
+				"4" {
+					return
+				}			
+				default {
+					Write-Host ""
+					Write-Host "  Invalid selection. Please select an option between 1 and 4." -ForegroundColor Yellow
+					Start-Sleep -Seconds 2
+				}
+			}
+		} while ($true)
+	}
 
 #endregion
 
@@ -306,6 +446,24 @@ function Invoke-DISM {
 	}
 	
 	switch ($script:DISMMode) {
+
+		"CheckHealth" {
+
+			Write-Log "Running DISM Check Health. This performs a quick check to see if your Windows component store has any corruption flags. It will not find any new corruption as it does not perform a deep scan, and if corruption is found, it will not attempt repairs."
+
+			DISM.exe /Online /Cleanup-Image /CheckHealth | Tee-Object -FilePath $logFile -Append
+
+			$exitCode = $LASTEXITCODE
+			Write-LocalDISMExitCode -OperationName "DISM CheckHealth" -ExitCode $exitCode
+			
+			if ($exitCode -ne 0) {
+				Write-Log "DISM CheckHealth detected a flag indicating possible corruption. It is recommended you run DISM RestoreHealth to perform a deep scan and attempt repairs."
+			}
+			else {
+				Write-Log "DISM CheckHealth found no corruption flags. Component store appears to be healthy."
+			}
+
+		}
 
 		"ScanHealth" {
 			Write-Log "Running DISM Scan Health. This performs a deep corruption scan of the Windows component store. This tool does not perform repairs. If issues are found, you will be prompted to run Restore Health to repair damaged components."
@@ -399,29 +557,57 @@ function Invoke-CHKDSK {
 	$systemDrive = $env:SystemDrive
 	Write-Log "Preparing to schedule CHKDSK on system drive ($systemDrive)."
 
-	if ($script:UseCHKDSK_R) {
-		$chkdskArgs = "$systemDrive /f /r"
-		Write-Log "CHKDSK will be scheduled with /f and /r. This is a deep scan so it will be thorough but will take an incredibly long time to complete. I'd recommend leaving the computer and coming back later."
+	switch ($script:CHKDSKMode) {
+		"F" {
+			$chkdskArgs = "$systemDrive /f"
+			Write-Log "CHKDSK mode: /f -- Standard error fix. CHKDSK will scan and fix file system errors upon next reboot."
+		}
+		"FR" {
+			$chkdskArgs = "$systemDrive /f /r"
+			Write-Log "CHKDSK mode: /f /r -- Error fix plus bad sector scan. This will take significantly longer than a standard scan. Will run upon next reboot."
+		}
+		"FRX" {
+			$chkdskArgs = "$systemDrive /f /r /x"
+			Write-Log "CHKDSK mode: /f /r /x -- Error fix, bad sector scan, and forced dismount. Most aggressive scan. Will not work on main system drive. "
+		}
+		"Scan" {
+			$chkdskArgs = "$systemDrive /Scan"
+			Write-Log "CHKDSK mode: /Scan -- Online scan. This scan runs without rebooting the machine or locking the volume."
+		}
+		"FB" {
+			$chkdskArgs = "$systemDrive /f /b"
+			Write-Log "CHKDSK mode: /f /b -- Error fix plus full bad cluster re-evaluation. This is the most thorough bad sector option but will also take the longest to complete."
+		}
+		default {
+			$chkdskArgs = "$systemDrive /f"
+			Write-Log "CHKDSK mode was not specified. Defaulting to /f"
+		} 
+	}
+
+	if ($script:CHKDSKMode -eq "Scan") {
+		Write-Log "Running CHKDSK online scan. This does not require a reboot."
+		cmd.exe /c "chkdsk $chkdskArgs" | Tee-Object -FilePath $logFile -Append
+		$exitCode = $LASTEXITCODE
+		Write-Log "CHKDSK online scan completed with exit code: $exitCode."
+
+		switch ($exitCode) {
+			0 {Write-Log "CHKDSK online scan completed successfully."}
+			1 {Write-Log "CHKDSK online scan completed. Some issues were discovered and queued for repair. A reboot may be required to apply fixes."}
+			default {Write-Log "CHKDSK online scan encountered an unexpected error. Please check logs for more details. Exit code: $exitCode"}
+		}
 	}
 	else {
-		$chkdskArgs = "$systemDrive /f"
-		Write-Log "CHKDSK will be scheduled with /f. This will attempt to fix any errors it finds. Should be pretty quick, for a CHKDSK at least."
+		Write-Log "Queuing CHKDSK with automatic confirmation."
+		cmd.exe /c "echo Y|chkdsk $chkdskArgs" | Tee-Object -FilePath $logFile -Append
+		$exitCode = $LASTEXITCODE
+		Write-Log "CHKDSK scheduling command completed with exit code: $exitCode."
+		switch ($exitCode) {
+			0		{Write-Log "CHKDSK successfully scheduled for next reboot. Save your work and restart when ready."}
+			1		{Write-Log "CHKDSK scheduling returned a non-zero exit code. Please check the logs for more details."}
+			default {Write-Log "CHKDSK scheduling encountered an unexpected error with exit code: $exitCode."}
+		}
 	}
-
-	Write-Log "Queuing CHKDSK with automatic confirmation."
-
-	cmd.exe /c "echo Y|chkdsk $chkdskArgs" | Tee-Object -FilePath $logFile -Append
-
-	$exitCode = $LASTEXITCODE
-	Write-Log "CHKDSK scheduling command completed with exit code: $exitCode."
-
-	switch ($exitCode) {
-		0 { Write-Log "CHKDSK was successfully scheduled for the next reboot. Your system will be checked for disk errors and repaired if necessary on the next startup. Don't forget to save your work and restart your computer soon!" }
-		1 { Write-Log "CHKDSK scheduling command completed but returned a non-zero exit code. Please check the logs for more details." }
-		default { Write-Log "CHKDSK scheduling command encountered an unexpected error with exit code: $exitCode. Please check the logs for more details and consider seeking additional help if needed." }
-	}
-}
-
+}	
 function Invoke-RebootPrompt {
 	Write-Log "Reboot switch has been engaged."
 	$rebootChoice = Read-Host "Do you want to reboot now to allow CHKDSK to run? (Y/N)"
@@ -559,6 +745,8 @@ if ($ResumeDeepScan) {
 	Write-Log "Resuming Deep Scan workflow is complete. Ending script execution."
 	return
 }
+
+Show-MainMenu
 
 if ($InvokeDISM) {
 	Write-Log "DISM switch is engaged. Launching DISM scan..."
