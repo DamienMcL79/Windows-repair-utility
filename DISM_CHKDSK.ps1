@@ -265,8 +265,6 @@ function Set-DeepScanProfile{
 
 #region --- MENU SUPPORT FUNCTIONS ---
 
-Write-Log "Welcome to WinRepair!"
-Write-Log "Logs will be saved to: $logFile"
 function Show-MainMenu {
 		do {
 			Clear-Host
@@ -312,15 +310,23 @@ function Show-MainMenu {
 						Invoke-MenuPause
 					}
 				"5" {
-						if (Set-EnhancedScanProfile) {
-							Invoke-DISM
-							Invoke-SFC
+    				if (Set-EnhancedScanProfile) {
+       					if (-not (Invoke-DISM)) {
+            				Write-Log "DISM stage failed. Aborting Enhanced Scan."
+            				Invoke-MenuPause
+        				}
+        				else {
+            				Invoke-SFC
+            				Invoke-CHKDSK
+            				Invoke-AutoReboot
+        				}
+    				}
+				}
+				"6" {
+						if (Set-DeepScanProfile) {
 							Invoke-CHKDSK
 							Invoke-AutoReboot
 						}
-					}
-				"6" {
-						Set-DeepScanProfile
 					}
 				"7" { Show-Help }
 				"8" { Exit-WinRepair }
@@ -431,6 +437,7 @@ function Show-CHKDSKMenu {
 				if (Confirm-CHKDSKReboot) {
 					$script:InvokeCHKDSK = $true
 					Invoke-CHKDSK
+					Invoke-AutoReboot
 					Invoke-MenuPause
 				}
 
@@ -441,6 +448,7 @@ function Show-CHKDSKMenu {
 				if (Confirm-CHKDSKReboot) {
 					$script:InvokeCHKDSK = $true
 					Invoke-CHKDSK
+					Invoke-AutoReboot
 					Invoke-MenuPause
 				}
 
@@ -451,6 +459,7 @@ function Show-CHKDSKMenu {
 				if (Confirm-CHKDSKReboot) {
 					$script:InvokeCHKDSK = $true
 					Invoke-CHKDSK
+					Invoke-AutoReboot
 					Invoke-MenuPause
 				}
 
@@ -470,6 +479,7 @@ function Show-CHKDSKMenu {
 				if (Confirm-CHKDSKReboot) {
 					$script:InvokeCHKDSK = $true
 					Invoke-CHKDSK
+					Invoke-AutoReboot
 					Invoke-MenuPause
 				}
 
@@ -728,6 +738,7 @@ function Invoke-CHKDSK {
 		Write-Log "CHKDSK scheduling command completed with exit code: $exitCode."
 		switch ($exitCode) {
 			0		{Write-Log "CHKDSK successfully scheduled for next reboot. Save your work and restart when ready."}
+			3		{Write-Log "CHKDSK successfully scheduled for next reboot. Volume is in use and will be checked on next startup."}
 			1		{Write-Log "CHKDSK scheduling returned a non-zero exit code. Please check the logs for more details."}
 			default {Write-Log "CHKDSK scheduling encountered an unexpected error with exit code: $exitCode."}
 		}
