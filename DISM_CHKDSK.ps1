@@ -438,9 +438,7 @@ function Show-CHKDSKMenu {
 					$script:InvokeCHKDSK = $true
 					Invoke-CHKDSK
 					Invoke-AutoReboot
-					Invoke-MenuPause
 				}
-
 			}
 			"2" {
 				$script:CHKDSKMode = "FR"
@@ -449,9 +447,7 @@ function Show-CHKDSKMenu {
 					$script:InvokeCHKDSK = $true
 					Invoke-CHKDSK
 					Invoke-AutoReboot
-					Invoke-MenuPause
 				}
-
 			}
 			"3" {
 				$script:CHKDSKMode = "FRX"
@@ -460,9 +456,7 @@ function Show-CHKDSKMenu {
 					$script:InvokeCHKDSK = $true
 					Invoke-CHKDSK
 					Invoke-AutoReboot
-					Invoke-MenuPause
 				}
-
 			}
 			"4" {
 				$script:CHKDSKMode = "Scan"
@@ -470,8 +464,6 @@ function Show-CHKDSKMenu {
 				$script:InvokeCHKDSK = $true
 				Invoke-CHKDSK
 				Invoke-MenuPause
-				
-
 			}
 			"5" {
 				$script:CHKDSKMode = "FB"
@@ -480,9 +472,7 @@ function Show-CHKDSKMenu {
 					$script:InvokeCHKDSK = $true
 					Invoke-CHKDSK
 					Invoke-AutoReboot
-					Invoke-MenuPause
 				}
-
 			}
 			"6" {
 				return
@@ -764,6 +754,30 @@ function Invoke-AutoReboot {
 	Write-Log "Please save all your work and close any open applications immediately to avoid data loss."
 
 	shutdown.exe /r /t 30 /c "WinRepair has completed DISM and SFC scans and is rebooting to complete final scan."
+
+	Write-Host ""
+	Write-Host "   System will reboot in 30 seconds." -ForegroundColor Yellow
+	Write-Host "   Press R to reboot immediately or wait for the countdown." -ForegroundColor Yellow
+	Write-Host "" 
+
+	for ($1 = 30; $1 -gt 0; $1--) {
+		Write-Host "`r $1 seconds remaining...    " -NoNewLine -ForegroundColor Yellow
+		
+		if ($Host.UI.RawUI.KeyAvailable) {
+			$key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+			if($key.Character -eq 'r' -or $key.Character -eq 'R') {
+				Write-Log "User triggered immediate reboot."
+                Write-Host "`r  Rebooting now...              " -ForegroundColor Yellow
+                shutdown.exe /r /t 0 /c "WinRepair: User triggered immediate reboot."
+                return
+			}
+		}
+
+		Start-Stop -Seconds 1
+
+	}
+
+	Write-Host "`r  Rebooting now...              " -ForegroundColor Yellow
 }
 function Register-DeepScanResumeTask {
     Write-Log "Registering scheduled task for Deep Scan post-reboot continuation."
