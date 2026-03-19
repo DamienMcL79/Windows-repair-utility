@@ -760,8 +760,8 @@ function Invoke-AutoReboot {
 	Write-Host "   Press R to reboot immediately or wait for the countdown." -ForegroundColor Yellow
 	Write-Host "" 
 
-	for ($1 = 30; $1 -gt 0; $1--) {
-		Write-Host "`r $1 seconds remaining...    " -NoNewLine -ForegroundColor Yellow
+	for ($i = 30; $i -gt 0; $i--) {
+		Write-Host "`r $i seconds remaining...    " -NoNewLine -ForegroundColor Yellow
 		
 		if ($Host.UI.RawUI.KeyAvailable) {
 			$key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
@@ -773,7 +773,7 @@ function Invoke-AutoReboot {
 			}
 		}
 
-		Start-Stop -Seconds 1
+		Start-Sleep -Seconds 1
 
 	}
 
