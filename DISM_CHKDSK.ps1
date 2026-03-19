@@ -108,7 +108,7 @@ if (-not (Test-IsAdministrator)) {
 
 #region --- CONFIG & LOG SETUP ---
 
-$defaultLogRoot = Join-Path $env:ProgramData "WinRepairUtility\Logs"
+$defaultLogRoot = Join-Path $env:SystemDrive "WinRepairUtility\Logs"
 $logRoot = $defaultLogRoot
 
 $usbDrive = Get-CimInstance Win32_LogicalDisk |
