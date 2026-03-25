@@ -537,12 +537,52 @@ function Show-Help {
     Write-Host "  =============================================" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  Press X to return to the main menu..." -ForegroundColor DarkGray
+	Write-Host "  Press A for About..." -ForegroundColor DarkGray
     Write-Host ""
 
     do {
         $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-    } while ($key.Character -ne 'x' -and $key.Character -ne 'X')
+    } while ($key.Character -notin @('x','X','a','A'))
+
+	if ($key.Character -eq 'a' -or $key.Character -eq 'A') {
+		Show-About
+	}
 }
+
+function Show-About {
+    Clear-Host
+    Write-Host ""
+    Write-Host "  =============================================" -ForegroundColor DarkGray
+    Write-Host "        WINREPAIR UTILITY - ABOUT              " -ForegroundColor White
+    Write-Host "  =============================================" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  WinRepair Utility" -ForegroundColor White
+    Write-Host "  Version 0.5" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  A Windows system diagnostics and repair tool."
+    Write-Host "  Provides guided access to SFC, DISM, and CHKDSK"
+    Write-Host "  with scan profiles and automated repair workflows."
+    Write-Host ""
+    Write-Host "  =============================================" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Author     : Damien McLaughlin" -ForegroundColor Gray
+    Write-Host "  Built with : PowerShell 5.1" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  =============================================" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Press H to return to Help..." -ForegroundColor DarkGray
+    Write-Host "  Press X to return to Main Menu..." -ForegroundColor DarkGray
+    Write-Host ""
+
+    do {
+        $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    } while ($key.Character -notin @('h','H','x','X'))
+
+    if ($key.Character -eq 'h' -or $key.Character -eq 'H') {
+        Show-Help
+    }
+}
+
 #endregion
 
 #region --- REPAIR FUNCTIONS---
