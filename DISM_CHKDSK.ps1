@@ -173,6 +173,92 @@ function Write-Log {
 	Add-Content -Path $logFile -Value $logEntry
 }
 
+function Invoke-ConsoleCommandWithProgress {
+	param(
+		[Parameter(Mandatory=$true)]
+		[string]$FilePath,
+		
+		[Parameter(Mandatory = $true)]
+		[string]$Arguments,
+
+		[Parameter(Mandatory = $true)]
+		[string]$Activity
+	)
+
+	$psi = New-Object System.Diagnostics.ProcessStartInfo
+	$psi.FileName = $FilePath
+	$psi.Arguments = $Arguments
+	$psi.UseShellExecute = $false
+	$psi.RedirectStandardOutput = $true
+	$psi.RedirectStandardError = $true
+	$psi.CreateNoWindow = $true
+
+	$process = New-Object System-Diagnostics.Process
+	$process.StartInfo = $psi
+
+	$null = $process.Start()
+
+	$percentComplete = 0
+	$lastStatus = "Starting..."
+	$stdOutDone = $false
+	$stdErrDone = $false
+
+	while (-not $process.HasExited -or -not $stdOutDone -or -not $stdErrDone) {
+
+		$handledOutput = $false
+
+		while (-not $process.StandardOutput.EndOfStream) {
+			$handledOutput = $true
+			$line = $process.StandardOutput.ReadLine()
+
+			if (-not [string]::IsNullOrWhiteSpace($line)) {
+				Add-Content -Path $logFile -Value $line
+
+				if ($line -match '(\d{1,3}(?:\.\d+)?)%') {
+					$rawPercent = [double]$matches[1]
+					$percentComplete = [Math]::Min([Math]::Floor($rawPercent), 100)
+					$lastStatus = "$percentComplete% complete"
+					Write-Progress -Activity $Activity -Status $lastStatus -PercentComplete $percentComplete 
+				}
+				else {
+					$lastStatus = $line.Trim()
+					Write-Progress -Activity $Activity -Status $lastStatus -PercentComplete $percentComplete
+				}
+			}
+		}
+
+		if ($process.HasExited -and $process.StandardOutput.EndofStream) {
+			$stdOutDone = $true
+		}
+
+		while (-not $process.StandardError.EndOfStream) {
+			$handledOutput = $true
+			$errLine = $process.StandardError.ReadLine()
+
+			if (-not [string]::IsNullOrWhiteSpace($errLine)) {
+				Add-Content -Path $logFile -Value "[stderr] $errLine"
+				$lastStatus = $errLine.Trim()
+				Write-Progress -Activity $Activity -Status $lastStatus -PercentComplete $percentComplete
+			}
+		}
+
+		if ($process.HasExited -and $process.StandardError.EndofStream) {
+			$stdErrDone = $true
+		}
+
+		if (-not $handledOutput) {
+			Start-Sleep -Milliseconds 250
+		}
+	}
+
+	$process.WaitForExit()
+
+	Write-Progress -Activity $Activity -Completed
+
+	return $process.ExitCode
+
+}
+
 function Confirm-CHKDSKReboot {
 	Write-Host ""
 	Write-Host "WARNING:" -ForegroundColor Red
