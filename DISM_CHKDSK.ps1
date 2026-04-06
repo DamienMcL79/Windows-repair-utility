@@ -146,9 +146,9 @@ $logFile = Join-Path $logRoot "WinRepair_$timestamp.log"
 
 "=== WinRepair Script Started: $(Get-Date) ===" | Out-File -FilePath $logFile -Encoding utf8
 
-$script:DISMMode = $null
+if (-not $script:DISMMode) {$script:DISMMode = $null}
 $script:ForceAutoReboot = $false
-$script:CHKDSKMode = $null
+if (-not $script:CHKDSKMode) {$script:CHKDSKMode = $null}
 
 #endregion
 
@@ -175,7 +175,7 @@ function Write-Log {
 
 function Invoke-ConsoleCommandWithProgress {
 	param(
-		[Parameter(Mandatory=$true)]
+		[Parameter(Mandatory = $true)]
 		[string]$FilePath,
 		
 		[Parameter(Mandatory = $true)]
@@ -193,7 +193,7 @@ function Invoke-ConsoleCommandWithProgress {
 	$psi.RedirectStandardError = $true
 	$psi.CreateNoWindow = $true
 
-	$process = New-Object System-Diagnostics.Process
+	$process = New-Object System.Diagnostics.Process
 	$process.StartInfo = $psi
 
 	$null = $process.Start()
@@ -227,7 +227,7 @@ function Invoke-ConsoleCommandWithProgress {
 			}
 		}
 
-		if ($process.HasExited -and $process.StandardOutput.EndofStream) {
+		if ($process.HasExited -and $process.StandardOutput.EndOfStream) {
 			$stdOutDone = $true
 		}
 
@@ -242,7 +242,7 @@ function Invoke-ConsoleCommandWithProgress {
 			}
 		}
 
-		if ($process.HasExited -and $process.StandardError.EndofStream) {
+		if ($process.HasExited -and $process.StandardError.EndOfStream) {
 			$stdErrDone = $true
 		}
 
@@ -339,8 +339,8 @@ function Set-DeepScanProfile{
 	Write-Log "Deep Scan selected. This will reboot your system and upon reboot it will run CHKDSK. Once CHKDSK is complete, system will load Windows and continue with diagnostics, running DISM RestoreHealth followed by SFC. You will be prompted to perform a full shutdown at the end to complete the final phase of repairs."
 	Write-Log "This is the most comprehensive scan profile, but it will take the longest to complete. It's recommended to run this scan when you have a good amount of time set aside and do not need to use your computer for a while."
 
-	if (-not (Register-DeepScanResumeTask)) {
-		Write-Log "Deep Scan aborted. Scheduled task could not be created."
+	if (-not (Register-DeepScanRunOnce)) {
+		Write-Log "Deep Scan aborted. RunOnce resume registration could not be created."
 		return $false
 	}
 
@@ -669,6 +669,22 @@ function Show-About {
     }
 }
 
+function Show-ResumeBanner {
+    Clear-Host
+    Write-Host ""
+    Write-Host "  =============================================" -ForegroundColor DarkGray
+    Write-Host "        WINREPAIR - DEEP SCAN RESUME           " -ForegroundColor White
+    Write-Host "  =============================================" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  CHKDSK completed during system startup." -ForegroundColor Gray
+    Write-Host "  WinRepair is now continuing the Deep Scan with:" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "    1. DISM RestoreHealth"
+    Write-Host "    2. SFC /scannow"
+    Write-Host ""
+    Write-Host "  Please do NOT close this window until all steps finish." -ForegroundColor Yellow
+    Write-Host ""
+}
 #endregion
 
 #region --- REPAIR FUNCTIONS---
@@ -702,9 +718,11 @@ function Invoke-DISM {
 
 			Write-Log "Running DISM Check Health. This performs a quick check to see if your Windows component store has any corruption flags. It will not find any new corruption as it does not perform a deep scan, and if corruption is found, it will not attempt repairs."
 
-			DISM.exe /Online /Cleanup-Image /CheckHealth | Tee-Object -FilePath $logFile -Append
+			$exitCode = Invoke-ConsoleCommandWithProgress `
+				-FilePath "DISM.exe" `
+				-Arguments "/Online /Cleanup-Image /CheckHealth" `
+				-Activity "DISM CheckHealth"
 
-			$exitCode = $LASTEXITCODE
 			Write-LocalDISMExitCode -OperationName "DISM CheckHealth" -ExitCode $exitCode
 			
 			if ($exitCode -ne 0) {
@@ -719,9 +737,11 @@ function Invoke-DISM {
 		"ScanHealth" {
 			Write-Log "Running DISM Scan Health. This performs a deep corruption scan of the Windows component store. This tool does not perform repairs. If issues are found, you will be prompted to run Restore Health to repair damaged components."
 
-			DISM.exe /Online /Cleanup-Image /ScanHealth | Tee-Object -FilePath $logFile -Append
+			$exitCode = Invoke-ConsoleCommandWithProgress `
+				-FilePath "DISM.exe" `
+				-Arguments "/Online /Cleanup-Image /ScanHealth" `
+				-Activity "DISM ScanHealth"
 
-			$exitCode = $LASTEXITCODE
 			Write-LocalDISMExitCode -OperationName "DISM ScanHealth" -ExitCode $exitCode
 
 			if ($exitCode -ne 0) {
@@ -731,9 +751,11 @@ function Invoke-DISM {
 				if ($repairChoice.ToUpper() -in @("Y", "YES")) {
 					Write-Log "Selection confirmed, preparing to run DISM Restore Health. Proceeding with repairs."
 
-					DISM.exe /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
+					$restoreExitCode = Invoke-ConsoleCommandWithProgress `
+						-FilePath "DISM.exe" `
+						-Arguments "/Online /Cleanup-Image /RestoreHealth" `
+						-Activity "DISM RestoreHealth"
 
-					$restoreExitCode = $LASTEXITCODE
 					Write-LocalDISMExitCode -OperationName "DISM RestoreHealth" -ExitCode $restoreExitCode
 				}
 				else {
@@ -743,22 +765,27 @@ function Invoke-DISM {
 				}
 			}
 		}
+
 		"RestoreHealth" {
 			Write-Log "Running DISM Restore Health. This will scan the Windows component store for corruption and attempts repairs."
 			Write-Log "This process can take a while, especially if corruption is found and a repair is necessary."
 
-			DISM.exe /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
+			$exitCode = Invoke-ConsoleCommandWithProgress `
+				-FilePath "DISM.exe" `
+				-Arguments "/Online /Cleanup-Image /RestoreHealth" `
+				-Activity "DISM RestoreHealth"
 
-			$exitCode = $LASTEXITCODE
 			Write-LocalDISMExitCode -OperationName "DISM RestoreHealth" -ExitCode $exitCode
 		}
 
 		default {
 			Write-Log "DISM mode was not specified. Defaulting to Scan Health."
 
-			DISM.exe /Online /Cleanup-Image /ScanHealth | Tee-Object -FilePath $logFile -Append
+			$exitCode = Invoke-ConsoleCommandWithProgress `
+				-FilePath "DISM.exe" `
+				-Arguments "/Online /Cleanup-Image /ScanHealth" `
+				-Activity "DISM ScanHealth"
 
-			$exitCode = $LASTEXITCODE
 			Write-LocalDISMExitCode -OperationName "DISM ScanHealth" -ExitCode $exitCode
 
 			if ($exitCode -ne 0) {
@@ -768,9 +795,11 @@ function Invoke-DISM {
 				if ($repairChoice.ToUpper() -in @("Y", "YES")) {
 					Write-Log "Selection confirmed, preparing to run DISM Restore Health. Proceeding with repairs."
 
-					DISM.exe /Online /Cleanup-Image /RestoreHealth | Tee-Object -FilePath $logFile -Append
+					$restoreExitCode = Invoke-ConsoleCommandWithProgress `
+						-FilePath "DISM.exe" `
+						-Arguments "/Online /Cleanup-Image /RestoreHealth" `
+						-Activity "DISM RestoreHealth"
 
-					$restoreExitCode = $LASTEXITCODE
 					Write-LocalDISMExitCode -OperationName "DISM RestoreHealth" -ExitCode $restoreExitCode
 				}
 				else {
@@ -788,9 +817,11 @@ function Invoke-DISM {
 function Invoke-SFC {
 	Write-Log "Starting System File Checker (SFC) scan. This may take a while. Go ahead, check out the break room, stretch your legs, maybe go touch some grass. I'll be here when you get back."
 
-	sfc /scannow | Tee-Object -FilePath $logFile -Append
+	$exitCode = Invoke-ConsoleCommandWithProgress `
+		-FilePath "sfc.exe" `
+		-Arguments "/scannow" `
+		-Activity "System File Checker"
 
-	$exitCode = $LASTEXITCODE
 	Write-Log "SFC scan completed with exit code: $exitCode."
 
 	switch ($exitCode){
@@ -905,66 +936,35 @@ function Invoke-AutoReboot {
 
 	Write-Host "`r  Rebooting now...              " -ForegroundColor Yellow
 }
-function Register-DeepScanResumeTask {
-    Write-Log "Registering scheduled task for Deep Scan post-reboot continuation."
 
-    $taskName  = "WinRepair_DeepScanResume"
-    $scriptPath = $PSCommandPath
+function Register-DeepScanRunOnce {
+	Write-Log "Registering RunOnce entry for Deep Scan post-reboot continuation."
 
-    $action = New-ScheduledTaskAction `
-        -Execute "powershell.exe" `
-        -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -ResumeDeepScan"
+	$runOncePath = "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
+	$entryName = "WinRepairDeepScanResume"
+	$scriptPath = $PSCommandPath
+	$command = "powershell.exe -NoExit -ExecutionPolicy Bypass -File `"$scriptPath`" -ResumeDeepScan"
 
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
-
-    $settings = New-ScheduledTaskSettingsSet `
-        -AllowStartIfOnBatteries `
-        -DontStopIfGoingOnBatteries `
-        -RunOnlyIfNetworkAvailable:$false
-
-    $principal = New-ScheduledTaskPrincipal `
-        -UserId "SYSTEM" `
-        -LogonType ServiceAccount `
-        -RunLevel Highest
-
-    try {
-        Register-ScheduledTask `
-            -TaskName $taskName `
-            -Action $action `
-            -Trigger $trigger `
-            -Settings $settings `
-            -Principal $principal `
-            -Force | Out-Null
-
-        Write-Log "Scheduled task '$taskName' registered successfully. It will run once on next login and resume the Deep Scan workflow."
-        return $true
-    }
-    catch {
-        Write-Log "Failed to register scheduled task. Error: $_"
-        Write-Log "Deep Scan cannot continue without the scheduled task. Aborting."
-        return $false
-    }
-}
-
-function Remove-DeepScanResumeTask {
-	$taskName = "WinRepair_DeepScanResume"
-
-	try {
-		if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
-			Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
-			Write-Log "Scheduled task '$taskName' removed successfully."
+	try{
+		if (-not (Test-Path $runOncePath)) {
+			New-Item -Path $runOncePath -Force | Out-Null
 		}
-		else {
-			Write-Log "Scheduled task '$taskName' not found. No need to remove."
-    	}
+
+		New-ItemProperty -Path $runOncePath -Name $entryName -Value $command -PropertyType String -Force | Out-Null
+
+		Write-Log "RunOnce entry '$entryName' registered successfully. Deep Scan will resume visibly after login."
+		return $true
 	}
 	catch {
-		Write-Log "Failed to remove scheduled task. Error: $_"
-		Write-Log "Please check Task Scheduler on your system and remove any task named '$taskName' to prevent it from running again on next login."
+		Write-Log "Failed to register RunOnce entry. Error: $_"
+		Write-Log "Deep Scan cannot continue without a post-reboot resume method. Aborting."
+		return $false
 	}
 }
+
 function Resume-DeepScanWorkflow {
-	Remove-DeepScanResumeTask
+	Show-ResumeBanner
+
 	Write-Log "Resuming Deep Scan workflow after reboot."
 	Write-Log "CHKDSK should complete upon reboot. Continuing with DISM RestoreHealth and SFC scans..."
 
@@ -1022,7 +1022,12 @@ if ($ResumeDeepScan) {
 	return
 }
 
-Show-MainMenu
+$hasDirectAction = $InvokeDISM -or $InvokeSFC -or $InvokeCHKDSK
+
+if (-not $hasDirectAction) {
+	Show-MainMenu
+	return 
+}
 
 if ($InvokeDISM) {
 	Write-Log "DISM switch is engaged. Launching DISM scan..."
