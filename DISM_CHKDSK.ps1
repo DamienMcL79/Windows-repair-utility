@@ -384,12 +384,14 @@ function Show-MainMenu {
 			switch ($choice.Trim()) {
 				"1" { Show-DISMMenu }
 				"2" {
+						Show-ScanScreen -Title "SYSTEM FILE CHECKER (SFC)" -Subtitle "Running SFC /scannow..."
 						$script:DISMMode = $null
 						Invoke-SFC
 						Invoke-MenuPause
 				}
 				"3" { Show-CHKDSKMenu }
 				"4" {
+						Show-ScanScreen -Title "QUICK SCAN PROFILE" -Subtitle "Running DISM ScanHealth followed by SFC..."
 						Set-QuickScanProfile
 						Invoke-DISM
 						Invoke-SFC
@@ -397,6 +399,7 @@ function Show-MainMenu {
 					}
 				"5" {
     				if (Set-EnhancedScanProfile) {
+						Show-ScanScreen -Title "ENHANCED SCAN PROFILE" -Subtitle "Running DISM, SFC, and preparing CHKDSK to run on reboot..."
        					if (-not (Invoke-DISM)) {
             				Write-Log "DISM stage failed. Aborting Enhanced Scan."
             				Invoke-MenuPause
@@ -410,6 +413,7 @@ function Show-MainMenu {
 				}
 				"6" {
 						if (Set-DeepScanProfile) {
+							Show-ScanScreen -Title "DEEP SCAN PROFILE" -Subtitle "Scheduling CHKDSK and preparing reboot..."
 							Invoke-CHKDSK
 							Invoke-AutoReboot
 						}
@@ -456,6 +460,7 @@ function Show-DISMMenu {
 
 			switch ($choice.Trim()) {
 				"1" {
+					Show-ScanScreen -Title "DISM CHECKHEALTH" -Subtitle "Checking component store health..."
 					$script:DISMMode = "CheckHealth"
                 	Write-Log "User selected DISM CheckHealth from menu."
                 	if (-not (Invoke-DISM)) {
@@ -465,6 +470,7 @@ function Show-DISMMenu {
 				}
 				"2" {
 					$script:DISMMode = "ScanHealth"
+					Show-ScanScreen -Title "DISM SCANHEALTH" -Subtitle "Scanning Windows component store..."
                 	Write-Log "User selected DISM ScanHealth from menu."
                 	if (-not (Invoke-DISM)) {
                     	Write-Log "DISM ScanHealth encountered an issue."
@@ -473,6 +479,7 @@ function Show-DISMMenu {
 				}
 				"3" {
 					$script:DISMMode = "RestoreHealth"
+					Show-ScanScreen -Title "DISM RESTOREHEALTH" -Subtitle "Scanning and repairing Windows component store..."
 					Write-Log "User selected DISM RestoreHealth from menu."
 					if (-not (Invoke-DISM)) {
 						Write-Log "DISM RestoreHealth encountered an issue."
@@ -667,6 +674,27 @@ function Show-About {
     if ($key.Character -eq 'h' -or $key.Character -eq 'H') {
         Show-Help
     }
+}
+
+function Show-ScanScreen {
+	param(
+		[Parameter(Mandatory = $true)]
+		[string]$Title,
+
+		[string]$Subtitle = ""
+	)
+
+	Clear-Host
+	Write-Host ""
+	Write-Host "  =============================================" -ForegroundColor DarkGray
+	Write-Host ("        {0}" -f $Title.PadRight(36)) -ForegroundColor White
+	Write-Host "  =============================================" -ForegroundColor DarkGray
+	Write-Host ""
+
+	if (-not [string]::IsNullOrWhiteSpace($Subtitle)) {
+		Write-Host "  $Subtitle" -ForegroundColor Gray
+		Write-Host ""
+	}
 }
 
 function Show-ResumeBanner {
