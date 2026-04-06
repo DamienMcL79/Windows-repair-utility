@@ -182,7 +182,9 @@ function Invoke-ConsoleCommandWithProgress {
 		[string]$Arguments,
 
 		[Parameter(Mandatory = $true)]
-		[string]$Activity
+		[string]$Activity,
+
+		[string]$DefaultStatus = "Working..."
 	)
 
 	$psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -221,8 +223,7 @@ function Invoke-ConsoleCommandWithProgress {
 					Write-Progress -Activity $Activity -Status $lastStatus -PercentComplete $percentComplete 
 				}
 				else {
-					$lastStatus = $line.Trim()
-					Write-Progress -Activity $Activity -Status $lastStatus -PercentComplete $percentComplete
+					Write-Progress -Activity $Activity -Status $DefaultStatus -PercentComplete $percentComplete
 				}
 			}
 		}
@@ -237,13 +238,13 @@ function Invoke-ConsoleCommandWithProgress {
 
 			if (-not [string]::IsNullOrWhiteSpace($errLine)) {
 				Add-Content -Path $logFile -Value "[stderr] $errLine"
-				$lastStatus = $errLine.Trim()
-				Write-Progress -Activity $Activity -Status $lastStatus -PercentComplete $percentComplete
+				Write-Progress -Activity $Activity -Status $DefaultStatus -PercentComplete $percentComplete
 			}
 		}
 
 		if ($process.HasExited -and $process.StandardError.EndOfStream) {
 			$stdErrDone = $true
+			Write-Progress -Activity $Activity -Status $DefaultStatus -PercentComplete 0
 		}
 
 		if (-not $handledOutput) {
@@ -749,7 +750,8 @@ function Invoke-DISM {
 			$exitCode = Invoke-ConsoleCommandWithProgress `
 				-FilePath "DISM.exe" `
 				-Arguments "/Online /Cleanup-Image /CheckHealth" `
-				-Activity "DISM CheckHealth"
+				-Activity "DISM CheckHealth" `
+				-DefaultStatus "Checking component store health..."
 
 			Write-LocalDISMExitCode -OperationName "DISM CheckHealth" -ExitCode $exitCode
 			
@@ -768,7 +770,8 @@ function Invoke-DISM {
 			$exitCode = Invoke-ConsoleCommandWithProgress `
 				-FilePath "DISM.exe" `
 				-Arguments "/Online /Cleanup-Image /ScanHealth" `
-				-Activity "DISM ScanHealth"
+				-Activity "DISM ScanHealth" `
+				-DefaultStatus "Scanning Windows component store..."
 
 			Write-LocalDISMExitCode -OperationName "DISM ScanHealth" -ExitCode $exitCode
 
@@ -801,7 +804,8 @@ function Invoke-DISM {
 			$exitCode = Invoke-ConsoleCommandWithProgress `
 				-FilePath "DISM.exe" `
 				-Arguments "/Online /Cleanup-Image /RestoreHealth" `
-				-Activity "DISM RestoreHealth"
+				-Activity "DISM RestoreHealth" `
+				-DefaultStatus "Scanning and repairing Windows component store..."
 
 			Write-LocalDISMExitCode -OperationName "DISM RestoreHealth" -ExitCode $exitCode
 		}
@@ -848,7 +852,8 @@ function Invoke-SFC {
 	$exitCode = Invoke-ConsoleCommandWithProgress `
 		-FilePath "sfc.exe" `
 		-Arguments "/scannow" `
-		-Activity "System File Checker"
+		-Activity "System File Checker" `
+		-DefaultStatus "Verifying and repairing system files..."
 
 	Write-Log "SFC scan completed with exit code: $exitCode."
 
